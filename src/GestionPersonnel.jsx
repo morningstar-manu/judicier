@@ -21,7 +21,7 @@ const C = {
   green: "#2E7D4F",
   greenSoft: "#E4F2EA",
   line: "#E3E8ED",
-  muted: "#7A8794",
+  muted: "#5E6E7B",
 };
 
 const ORG = {
@@ -106,8 +106,9 @@ const isLightHex = (hex) => {
 };
 /* Palette de texte adaptée à la luminosité du fond */
 const cardTheme = (bg1) => isLightHex(bg1)
-  ? { clair: true, main: "#182430", sub: "#3C4A58", muted: "#7A8794", pays: "#5E6E7B", bordPhoto: "rgba(24,36,48,0.35)" }
-  : { clair: false, main: "#FFFFFF", sub: "#C9D5DD", muted: "#8FA0AE", pays: "#AFBEC9", bordPhoto: "rgba(255,255,255,0.5)" };
+  ? { clair: true, main: "#182430", sub: "#3C4A58", muted: "#5E6E7B", pays: "#4A5866", bordPhoto: "rgba(24,36,48,0.35)" }
+  : { clair: false, main: "#FFFFFF", sub: "#E2E9EF", muted: "#C5D0D8", pays: "#D8E0E8", bordPhoto: "rgba(255,255,255,0.5)" };
+const chipTextColor = (hex) => (isLightHex(hex) ? "#182430" : "#FFFFFF");
 const EMPTY_SEARCH = { q: "", dept: "Tous", statut: "Tous", salMin: "", salMax: "", dateMin: "", dateMax: "", tri: "nom" };
 
 /* ---------- Personnel importé du TABLEAU_PERSONNEL_2026.xlsx (475 agents, 40 sections) ---------- */
@@ -1540,14 +1541,14 @@ const CarteVersoPro = ({ emp, kind = "PR", w = 340 }) => {
           L'authenticité se vérifie en scannant le QR au recto.
         </p>
         <div style={{ marginTop: "auto", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10 }}>
-          <div style={{ fontSize: w * 0.023, color: "#7A8794", lineHeight: 1.5 }}>
+          <div style={{ fontSize: w * 0.023, color: "#5E6E7B", lineHeight: 1.5 }}>
             Matricule : {matricule(emp, kind)}
             {emp.pieceId ? <><br />Pièce d'identité : {emp.pieceId}</> : null}
             <br />Délivrée le {dateEmission}
           </div>
           <div style={{ textAlign: "center", fontSize: w * 0.023, color: "#3C4A58", flexShrink: 0 }}>
             <div style={{ height: w * 0.075 }} />
-            <div style={{ borderTop: "1px solid #7A8794", paddingTop: w * 0.008, whiteSpace: "nowrap" }}>Signature et cachet</div>
+            <div style={{ borderTop: "1px solid #5E6E7B", paddingTop: w * 0.008, whiteSpace: "nowrap" }}>Signature et cachet</div>
           </div>
         </div>
       </div>
@@ -1579,7 +1580,7 @@ const CartePro = ({ emp, secret = "", kind = "PR", w = 340 }) => {
         </div>
         <img src={ARMOIRIES} alt="" style={{ width: w * 0.1, height: "auto", flexShrink: 0 }} />
       </div>
-      <div style={{ background: cfg.bandColor(emp), textAlign: "center", fontSize: w * 0.028, fontWeight: 700, letterSpacing: 3.5, padding: `${w * 0.008}px 0` }}>
+      <div style={{ background: cfg.bandColor(emp), color: "#fff", textAlign: "center", fontSize: w * 0.028, fontWeight: 700, letterSpacing: 3.5, padding: `${w * 0.008}px 0` }}>
         {cfg.titre(emp)}
       </div>
       <div style={{ flex: 1, display: "flex", gap: w * 0.035, alignItems: "center", padding: `0 ${w * 0.035}px`, minHeight: 0 }}>
@@ -1595,7 +1596,7 @@ const CartePro = ({ emp, secret = "", kind = "PR", w = 340 }) => {
             {nomComplet(emp)}
           </div>
           <div style={{ fontSize: w * 0.033, color: T.sub, marginTop: 1 }}>{cfg.ligne2(emp)}</div>
-          <div style={{ display: "inline-block", background: col, fontSize: w * 0.026, fontWeight: 600, borderRadius: 999, padding: `${w * 0.006}px ${w * 0.024}px`, marginTop: w * 0.014 }}>
+          <div style={{ display: "inline-block", background: col, color: chipTextColor(col), fontSize: w * 0.026, fontWeight: 600, borderRadius: 999, padding: `${w * 0.006}px ${w * 0.024}px`, marginTop: w * 0.014 }}>
             {cfg.chip(emp)}
           </div>
           <div style={{ fontSize: w * 0.026, color: T.muted, marginTop: w * 0.012, letterSpacing: 1 }}>
@@ -2792,7 +2793,7 @@ ${bande}
   /* ---------- Page de couverture ---------- */
   if (showCover && !currentUser) {
     return (
-      <div style={{
+      <main style={{
         minHeight: "100vh", background: `linear-gradient(160deg, ${C.ink} 0%, #0F1820 100%)`,
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
         padding: 24, fontFamily: "'Segoe UI', system-ui, sans-serif", textAlign: "center",
@@ -2806,8 +2807,8 @@ ${bande}
         <img src={ARMOIRIES} alt="Armoiries de la République Centrafricaine"
           style={{ width: "clamp(120px, 20vw, 170px)", height: "auto", marginBottom: 26, filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.45))" }} />
 
-        <div style={{ color: "#B9C6D0", fontSize: 14, letterSpacing: 4, marginBottom: 10 }}>{ORG.pays}</div>
-        <div style={{ color: "#8FA0AE", fontSize: 12.5, letterSpacing: 2, marginBottom: 34, fontStyle: "italic" }}>{ORG.devise}</div>
+        <div style={{ color: "#D0DAE2", fontSize: 14, letterSpacing: 4, marginBottom: 10 }}>{ORG.pays}</div>
+        <div style={{ color: "#B8C5CE", fontSize: 12.5, letterSpacing: 2, marginBottom: 34, fontStyle: "italic" }}>{ORG.devise}</div>
 
         <h1 style={{ color: "#fff", fontSize: "clamp(24px, 5vw, 40px)", margin: "0 0 12px", letterSpacing: 2, lineHeight: 1.25, maxWidth: 700 }}>
           {ORG.nom}
@@ -2819,7 +2820,7 @@ ${bande}
           </div>
           <div style={{ textAlign: "left" }}>
             <div style={{ color: "#fff", fontWeight: 700, fontSize: 19 }}>GestiPers</div>
-            <div style={{ color: "#8FA0AE", fontSize: 13 }}>Système de gestion du personnel</div>
+            <div style={{ color: "#D0DAE2", fontSize: 13 }}>Système de gestion du personnel</div>
           </div>
         </div>
 
@@ -2832,17 +2833,17 @@ ${bande}
           <Lock size={16} /> Accéder à l'application
         </button>
 
-        <div style={{ marginTop: 46, color: "#5E6E7B", fontSize: 11.5 }}>
+        <div style={{ marginTop: 46, color: "#9AABB6", fontSize: 11.5 }}>
           Usage réservé au personnel autorisé · {new Date().getFullYear()}
         </div>
-      </div>
+      </main>
     );
   }
 
   /* ---------- Écran de connexion ---------- */
   if (!currentUser) {
     return (
-      <div style={{ minHeight: "100vh", background: C.ink, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+      <main style={{ minHeight: "100vh", background: C.ink, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
         <div style={{ background: "#fff", borderRadius: 16, padding: "34px 30px", width: "100%", maxWidth: 380 }}>
           <div style={{ display: "flex", width: "100%", height: 4, borderRadius: 999, overflow: "hidden", marginBottom: 20 }}>
             {FLAG.map((c) => <div key={c} style={{ flex: 1, background: c }} />)}
@@ -2888,12 +2889,12 @@ ${bande}
             </button>
           </div>
           {users.length === 1 && users[0].identifiant === "admin" && users[0].motDePasse === "admin123" && (
-            <div style={{ marginTop: 16, fontSize: 12, color: C.muted, background: C.bg, borderRadius: 8, padding: "9px 12px" }}>
-              Première connexion : <strong>admin</strong> / <strong>admin123</strong>. Pensez à changer ce mot de passe dans l'onglet Comptes.
+            <div style={{ marginTop: 16, fontSize: 12, color: C.inkSoft, background: C.bg, borderRadius: 8, padding: "9px 12px" }}>
+              Première connexion : <strong style={{ color: C.ink }}>admin</strong> / <strong style={{ color: C.ink }}>admin123</strong>. Pensez à changer ce mot de passe dans l'onglet Comptes.
             </div>
           )}
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -3054,7 +3055,7 @@ ${bande}
             <div style={cardGrid2}>
               {/* Effectif par département */}
               <div style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, padding: 20 }}>
-                <h3 style={{ margin: "0 0 14px", fontSize: 15 }}>{t("dash.deptHead")}</h3>
+                <h2 style={{ margin: "0 0 14px", fontSize: 15 }}>{t("dash.deptHead")}</h2>
                 {deptNames.map((d) => {
                   const n = actifs.filter((e) => e.departement === d).length;
                   const pct = actifs.length ? (n / actifs.length) * 100 : 0;
@@ -3072,7 +3073,7 @@ ${bande}
               </div>
               {/* Dernières demandes */}
               <div style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, padding: 20 }}>
-                <h3 style={{ margin: "0 0 14px", fontSize: 15 }}>{t("dash.lastLeaves")}</h3>
+                <h2 style={{ margin: "0 0 14px", fontSize: 15 }}>{t("dash.lastLeaves")}</h2>
                 {leaves.length === 0 && <div style={{ color: C.muted, fontSize: 13 }}>Aucune demande pour le moment. Ajoutez-en depuis l'onglet Congés.</div>}
                 {leaves.slice(-5).reverse().map((l) => {
                   const e = empById(l.employeeId);
@@ -3466,12 +3467,12 @@ ${bande}
               {/* Tableau de situation */}
               <div style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, padding: 18, marginBottom: 22 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
-                  <h3 style={{ margin: 0, fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
+                  <h2 style={{ margin: 0, fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
                     <MapPin size={16} color={C.teal} />
                     {boardTab === "mission" ? `Agents en mission (${agentsMission.length})`
                       : boardTab === "conge" ? `Agents en congé (${agentsConge.length})`
                       : `Agents actifs au poste (${agentsPoste.length})`}
-                  </h3>
+                  </h2>
                   <div style={{ position: "relative", minWidth: 220 }}>
                     <Search size={15} style={{ position: "absolute", left: 10, top: 11, color: C.muted }} />
                     <input value={boardSearch} onChange={(e) => setBoardSearch(e.target.value)} placeholder="Rechercher un agent…"
@@ -3510,7 +3511,7 @@ ${bande}
 
               {/* Ordres de mission */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
-                <h3 style={{ margin: 0, fontSize: 16 }}>{t("mis.orders")} ({missions.length})</h3>
+                <h2 style={{ margin: 0, fontSize: 16 }}>{t("mis.orders")} ({missions.length})</h2>
                 <select value={missionFilter} onChange={(e) => setMissionFilter(e.target.value)} style={{ ...inputStyle, width: "auto" }}>
                   <option>Toutes</option>
                   <option>En attente de validation</option>
@@ -3795,9 +3796,9 @@ ${bande}
               {/* Validité des cartes sélectionnées */}
               {isAdmin && (
                 <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 13, padding: 18, marginBottom: 14 }}>
-                  <h3 style={{ margin: "0 0 4px", fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
+                  <h2 style={{ margin: "0 0 4px", fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
                     <CalendarDays size={16} color={C.teal} /> Validité des cartes
-                  </h3>
+                  </h2>
                   <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 12px" }}>
                     Fixez une date d'expiration commune pour les cartes sélectionnées (chaque fiche peut aussi avoir sa propre validité). Changer la validité invalide l'ancien QR : réimprimez les cartes concernées.
                   </p>
@@ -3820,9 +3821,9 @@ ${bande}
 
               {/* Vérification d'authenticité */}
               <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 13, padding: 18, marginBottom: 20 }}>
-                <h3 style={{ margin: "0 0 4px", fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
+                <h2 style={{ margin: "0 0 4px", fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
                   <Shield size={16} color={C.teal} /> Vérifier l'authenticité d'une carte
-                </h3>
+                </h2>
                 <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 12px" }}>
                   Saisissez le matricule et le code affichés lors du scan du QR — ou collez directement tout le contenu du QR dans le champ matricule.
                 </p>
@@ -4073,9 +4074,9 @@ ${bande}
             {/* Activités et manifestations */}
             <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 13, padding: 18, marginBottom: 18 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: evenements.length ? 12 : 4 }}>
-                <h3 style={{ margin: 0, fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
+                <h2 style={{ margin: 0, fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
                   <CalendarDays size={16} color={C.teal} /> Activités et manifestations
-                </h3>
+                </h2>
                 <button onClick={() => setEvtModal({ mode: "add", form: { ...EMPTY_EVT, dateDebut: today(), dateFin: today() } })}
                   style={{ background: C.tealSoft, color: C.teal, border: "none", borderRadius: 8, padding: "8px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", gap: 6, alignItems: "center" }}>
                   <Plus size={14} /> Nouvelle activité
@@ -4194,10 +4195,10 @@ ${bande}
 
               {/* Ordres de mission à valider */}
               <div style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, padding: 18, marginBottom: 18 }}>
-                <h3 style={{ margin: "0 0 12px", fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
+                <h2 style={{ margin: "0 0 12px", fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
                   <Plane size={16} color={C.teal} /> Ordres de mission en attente
                   {missionsAttente.length > 0 && <Badge bg={C.amberSoft} color="#9A6B14">{missionsAttente.length}</Badge>}
-                </h3>
+                </h2>
                 {missionsAttente.length === 0 && (
                   <div style={{ fontSize: 13, color: C.muted, display: "flex", alignItems: "center", gap: 8 }}>
                     <Check size={15} color={C.green} /> Aucun ordre de mission en attente — tout est à jour.
@@ -4232,10 +4233,10 @@ ${bande}
 
               {/* Congés à valider */}
               <div style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, padding: 18 }}>
-                <h3 style={{ margin: "0 0 12px", fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
+                <h2 style={{ margin: "0 0 12px", fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
                   <CalendarDays size={16} color={C.teal} /> Demandes de congé en attente
                   {congesAttente.length > 0 && <Badge bg={C.amberSoft} color="#9A6B14">{congesAttente.length}</Badge>}
-                </h3>
+                </h2>
                 {congesAttente.length === 0 && (
                   <div style={{ fontSize: 13, color: C.muted, display: "flex", alignItems: "center", gap: 8 }}>
                     <Check size={15} color={C.green} /> Aucune demande de congé en attente — tout est à jour.
@@ -4482,7 +4483,7 @@ ${bande}
           };
           const Carte = ({ titre, children }) => (
             <div style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, padding: 18 }}>
-              <h3 style={{ margin: "0 0 14px", fontSize: 15 }}>{titre}</h3>
+              <h2 style={{ margin: "0 0 14px", fontSize: 15 }}>{titre}</h2>
               {children}
             </div>
           );
