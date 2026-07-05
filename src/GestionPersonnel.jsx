@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 import {
   Users, LayoutDashboard, CalendarDays, ClipboardCheck, Plus, Search,
   Pencil, Trash2, X, Check, XCircle, Wallet, UserCheck, UserMinus, Briefcase, Camera, Shield, LogOut, Lock,
-  Download, FileText, FileSpreadsheet, CreditCard, Printer, UserPlus, Building2, Plane, MapPin, BadgeCheck, ChevronDown, ChevronRight, History, BarChart3, FolderOpen, ScrollText, Upload
+  Download, FileText, FileSpreadsheet, CreditCard, Printer, UserPlus, Building2, Plane, MapPin, BadgeCheck, ChevronDown, ChevronRight, History, BarChart3, FolderOpen, ScrollText, Upload, Bell
 } from "lucide-react";
 
 /* ---------- Palette ---------- */
@@ -80,6 +80,45 @@ const compressPhoto = (file) =>
 const EMPTY_EMP = { nom: "", prenom: "", poste: "", grade: "", matriculeOfficiel: "", hierarchie: "", departement: DEFAULT_DEPARTEMENTS[0].nom, salaire: "", telephone: "", email: "", dateEmbauche: today(), statut: "Actif", photo: "", carteValidite: "" };
 const EMPTY_LEAVE = { employeeId: "", type: TYPES_CONGE[0], debut: today(), fin: today(), motif: "", statut: "En attente" };
 const DEFAULT_ADMIN = { id: "u1", nom: "Administrateur", identifiant: "admin", motDePasse: "admin123", role: "Administrateur" };
+const SESSION_KEY = "ghr:session";
+const readSession = () => {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (typeof s?.identifiant === "string" || typeof s?.userId === "string") {
+      return { userId: s.userId || "", identifiant: s.identifiant || "" };
+    }
+    return null;
+  } catch { return null; }
+};
+const findSessionUser = (users, session) => {
+  if (!session || !users?.length) return null;
+  if (session.userId) {
+    const byId = users.find((u) => u.id === session.userId);
+    if (byId) return byId;
+  }
+  const ident = (session.identifiant || "").trim().toLowerCase();
+  if (ident) return users.find((u) => u.identifiant.toLowerCase() === ident) || null;
+  return null;
+};
+const saveSession = (user) => {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ userId: user.id, identifiant: user.identifiant }));
+  } catch { /* stockage indisponible */ }
+};
+const clearSession = () => { try { localStorage.removeItem(SESSION_KEY); } catch {} };
+const hasSession = () => !!readSession();
+const notifReadKey = (userId) => `ghr:notifs-read:${userId}`;
+const readNotifIds = (userId) => {
+  try {
+    const raw = localStorage.getItem(notifReadKey(userId));
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+};
+const saveNotifIds = (userId, ids) => {
+  try { localStorage.setItem(notifReadKey(userId), JSON.stringify(ids)); } catch {}
+};
 const EMPTY_USER = { nom: "", identifiant: "", motDePasse: "", role: "Utilisateur" };
 const EMPTY_PREST = { nom: "", prenom: "", societe: "", fonction: "", pieceId: "", telephone: "", email: "", contratDebut: "", contratFin: "", statut: "Actif", photo: "", carteValidite: "" };
 const EMPTY_VIS = { nom: "", prenom: "", pieceId: "", motif: "", service: "", evenement: "", categorie: "Standard", photo: "", dateVisite: today(), carteValidite: "" };
@@ -649,6 +688,47 @@ const DEMO = {
   attendance: {},
 };
 
+const SYNC_POLL_MS = 12000;
+const dataSignature = (d) => (d ? JSON.stringify(d) : "");
+const cloneDemoData = () => ({
+  ...DEMO,
+  departments: DEMO.departments.map((d) => ({ ...d })),
+  users: [{ ...DEFAULT_ADMIN }],
+  employees: DEMO.employees.map((e) => ({ ...e })),
+  leaves: [],
+  attendance: {},
+});
+
+const normalizeAppData = (parsed) => {
+  if (!parsed.departments || parsed.departments.length === 0) {
+    parsed.departments = DEFAULT_DEPARTEMENTS.map((d) => ({ ...d }));
+  }
+  if (!parsed.users || parsed.users.length === 0) {
+    parsed.users = [{ ...DEFAULT_ADMIN }];
+  }
+  if (!parsed.secret) parsed.secret = uid() + uid();
+  if (!parsed.tp2026) {
+    const demoIds = ["e1", "e2", "e3"];
+    parsed.employees = (parsed.employees || []).filter((e) => !demoIds.includes(e.id));
+    parsed.leaves = (parsed.leaves || []).filter((l) => !demoIds.includes(l.employeeId));
+    const nomsDepts = new Set((parsed.departments || []).map((d) => d.nom));
+    IMPORT_DEPARTEMENTS.forEach((d) => { if (!nomsDepts.has(d.nom)) parsed.departments.push({ ...d }); });
+    const idsExistants = new Set(parsed.employees.map((e) => e.id));
+    PERSONNEL_2026.forEach((e) => { if (!idsExistants.has(e.id)) parsed.employees.push({ ...e }); });
+    parsed.tp2026 = true;
+  }
+  if (!parsed.prestataires) parsed.prestataires = [];
+  if (!parsed.visiteurs) parsed.visiteurs = [];
+  if (!parsed.evenements) parsed.evenements = [];
+  if (!parsed.missions) parsed.missions = [];
+  parsed.missions.forEach((m) => { if (!m.validation) m.validation = "Validée"; });
+  if (!parsed.lang) parsed.lang = "fr";
+  if (!parsed.journal) parsed.journal = [];
+  if (!parsed.dossiers) parsed.dossiers = [];
+  if (!parsed.decrets) parsed.decrets = [];
+  return parsed;
+};
+
 /* ---------- Petits composants ---------- */
 const Badge = ({ bg, color, children }) => (
   <span style={{ background: bg, color, fontSize: 12, fontWeight: 600, padding: "3px 10px", borderRadius: 999, whiteSpace: "nowrap" }}>{children}</span>
@@ -681,9 +761,19 @@ const Field = ({ label, children }) => (
 );
 
 const inputStyle = {
-  border: `1px solid ${C.line}`, borderRadius: 8, padding: "9px 11px",
+  border: `1px solid ${C.line}`, borderRadius: 8, padding: "0 11px",
   fontSize: 14, color: C.ink, background: "#fff", outline: "none", fontFamily: "inherit",
-  width: "100%", boxSizing: "border-box", minHeight: 40, lineHeight: 1.35,
+  width: "100%", boxSizing: "border-box",
+  WebkitAppearance: "none", appearance: "none",
+};
+
+const textareaStyle = {
+  ...inputStyle,
+  height: "auto",
+  minHeight: 88,
+  padding: "9px 11px",
+  lineHeight: 1.45,
+  resize: "vertical",
 };
 
 const searchIconStyle = {
@@ -1045,6 +1135,15 @@ const fmtCourt = (iso) => {
   return y && m && d ? `${d}/${m}/${y}` : String(iso);
 };
 const carteExpiree = (e) => valCarte(e) < today();
+const joursAvantExpiration = (e) => {
+  const fin = new Date(valCarte(e) + "T12:00:00");
+  const now = new Date(today() + "T12:00:00");
+  return Math.round((fin - now) / 86400000);
+};
+const carteExpireBientot = (e) => {
+  const j = joursAvantExpiration(e);
+  return j >= 0 && j <= 30;
+};
 
 /* Générateur PDF minimal : place des images JPEG (cartes recto/verso) sur des pages A4.
    Aucune dépendance — construit le fichier octet par octet (PDF 1.4, filtre DCTDecode). */
@@ -1352,6 +1451,9 @@ const L10N = {
     "login.id": "Identifiant", "login.pwd": "Mot de passe", "login.btn": "Se connecter",
     "login.sub": "Gestion du personnel",
     "side.files": "dossiers enregistrés", "side.logout": "Se déconnecter",
+    "notif.title": "Notifications", "notif.empty": "Aucune notification", "notif.markAll": "Tout marquer comme lu",
+    "notif.mission": "Mission en attente", "notif.leave": "Congé en attente", "notif.cardsExpired": "Carte(s) expirée(s)",
+    "notif.cardsSoon": "Carte(s) à renouveler (30 j)", "notif.defaultPwd": "Mot de passe par défaut actif",
     "dash.title": "Tableau de bord", "dash.export": "Exporter les données",
     "dash.deptHead": "Effectif par département", "dash.lastLeaves": "Dernières demandes de congé",
     "kpi.actifs": "Agents actifs", "kpi.mission": "En mission aujourd'hui",
@@ -1379,6 +1481,9 @@ const L10N = {
     "login.id": "Username", "login.pwd": "Password", "login.btn": "Sign in",
     "login.sub": "Staff management",
     "side.files": "records on file", "side.logout": "Sign out",
+    "notif.title": "Notifications", "notif.empty": "No notifications", "notif.markAll": "Mark all as read",
+    "notif.mission": "Pending mission", "notif.leave": "Pending leave", "notif.cardsExpired": "Expired card(s)",
+    "notif.cardsSoon": "Card(s) expiring within 30 days", "notif.defaultPwd": "Default password still active",
     "dash.title": "Dashboard", "dash.export": "Export data",
     "dash.deptHead": "Headcount by department", "dash.lastLeaves": "Latest leave requests",
     "kpi.actifs": "Active staff", "kpi.mission": "On mission today",
@@ -1406,6 +1511,9 @@ const L10N = {
     "login.id": "Логин", "login.pwd": "Пароль", "login.btn": "Войти",
     "login.sub": "Управление персоналом",
     "side.files": "дел в реестре", "side.logout": "Выйти",
+    "notif.title": "Уведомления", "notif.empty": "Нет уведомлений", "notif.markAll": "Отметить все прочитанными",
+    "notif.mission": "Командировка на утверждении", "notif.leave": "Отпуск на утверждении", "notif.cardsExpired": "Просроченные карты",
+    "notif.cardsSoon": "Карты истекают в течение 30 дней", "notif.defaultPwd": "Используется пароль по умолчанию",
     "dash.title": "Панель управления", "dash.export": "Экспорт данных",
     "dash.deptHead": "Штат по подразделениям", "dash.lastLeaves": "Последние заявки на отпуск",
     "kpi.actifs": "Активный персонал", "kpi.mission": "В командировке сегодня",
@@ -1654,7 +1762,10 @@ export default function GestionPersonnel() {
   const [userModal, setUserModal] = useState(null); // { mode:'add'|'edit', form }
   const [confirmDelUser, setConfirmDelUser] = useState(null);
   const [advSearch, setAdvSearch] = useState({ ...EMPTY_SEARCH });
-  const [showCover, setShowCover] = useState(true);
+  const [showCover, setShowCover] = useState(() => !hasSession());
+  const [authHydrated, setAuthHydrated] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [readNotifs, setReadNotifs] = useState([]);
   const [exportModal, setExportModal] = useState(false);
   const [cardSel, setCardSel] = useState(null); // null = tous les porteurs du type sélectionnés
   const [cardKind, setCardKind] = useState("PR"); // PR employés, PS prestataires, VI visiteurs
@@ -1689,48 +1800,116 @@ export default function GestionPersonnel() {
   const [prestSearch, setPrestSearch] = useState("");
   const [prestSocFilter, setPrestSocFilter] = useState("Toutes");
 
+  const dataRef = useRef(null);
+  const skipSyncUntilRef = useRef(0);
+  const syncBusyRef = useRef(false);
+  const currentUserRef = useRef(null);
+
+  const isFormOpen = !!(empModal || leaveModal || deptModal || userModal || exportModal
+    || prestModal || visModal || carteModal || missionModal || docModal || decretModal
+    || evtModal || confirmDel || confirmDelUser || confirmDelTiers || confirmDelMission
+    || confirmDelDoc || confirmDelDecret || confirmPurgeJournal || dossierAgent || ficheAgent);
+
+  const applySessionFromUsers = useCallback((userList) => {
+    const sessionUser = findSessionUser(userList, readSession());
+    if (readSession() && !sessionUser) clearSession();
+    if (sessionUser) {
+      setCurrentUser(sessionUser);
+      setShowCover(false);
+      saveSession(sessionUser);
+      return sessionUser;
+    }
+    return null;
+  }, []);
+
   /* Chargement */
   useEffect(() => {
     (async () => {
       try {
-        const r = await window.storage.get("ghr:data");
-        const parsed = r ? JSON.parse(r.value) : DEMO;
-        if (!parsed.departments || parsed.departments.length === 0) {
-          parsed.departments = DEFAULT_DEPARTEMENTS.map((d) => ({ ...d }));
-        }
-        if (!parsed.users || parsed.users.length === 0) {
-          parsed.users = [{ ...DEFAULT_ADMIN }];
-        }
-        if (!parsed.secret) parsed.secret = uid() + uid();
-        // Import unique du tableau du personnel 2026
-        if (!parsed.tp2026) {
-          const demoIds = ["e1", "e2", "e3"];
-          parsed.employees = (parsed.employees || []).filter((e) => !demoIds.includes(e.id));
-          parsed.leaves = (parsed.leaves || []).filter((l) => !demoIds.includes(l.employeeId));
-          const nomsDepts = new Set((parsed.departments || []).map((d) => d.nom));
-          IMPORT_DEPARTEMENTS.forEach((d) => { if (!nomsDepts.has(d.nom)) parsed.departments.push({ ...d }); });
-          const idsExistants = new Set(parsed.employees.map((e) => e.id));
-          PERSONNEL_2026.forEach((e) => { if (!idsExistants.has(e.id)) parsed.employees.push({ ...e }); });
-          parsed.tp2026 = true;
-        }
-        if (!parsed.prestataires) parsed.prestataires = [];
-        if (!parsed.visiteurs) parsed.visiteurs = [];
-        if (!parsed.evenements) parsed.evenements = [];
-        if (!parsed.missions) parsed.missions = [];
-        parsed.missions.forEach((m) => { if (!m.validation) m.validation = "Validée"; });
-        if (!parsed.lang) parsed.lang = "fr";
-        if (!parsed.journal) parsed.journal = [];
-        if (!parsed.dossiers) parsed.dossiers = [];
-        if (!parsed.decrets) parsed.decrets = [];
+        const r = await window.storage.get("ghr:data", { preferRemote: true });
+        const parsed = normalizeAppData(r ? JSON.parse(r.value) : cloneDemoData());
         setData(parsed);
+        applySessionFromUsers(parsed.users || []);
       } catch {
-        setData(DEMO);
+        const parsed = cloneDemoData();
+        setData(parsed);
+        applySessionFromUsers(parsed.users);
+      } finally {
+        setAuthHydrated(true);
       }
     })();
-  }, []);
+  }, [applySessionFromUsers]);
+
+  useEffect(() => {
+    if (!currentUser) { setReadNotifs([]); return; }
+    setReadNotifs(readNotifIds(currentUser.id));
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!authHydrated || !data) return;
+    const session = readSession();
+    if (!session) return;
+    const u = findSessionUser(data.users || [], session);
+    if (!u) {
+      if (currentUser) { clearSession(); setCurrentUser(null); }
+      return;
+    }
+    if (!currentUser || currentUser.id !== u.id) {
+      setCurrentUser(u);
+      setShowCover(false);
+      saveSession(u);
+    }
+  }, [authHydrated, data, currentUser]);
+
+  useEffect(() => {
+    if (!notifOpen) return;
+    const close = (e) => { if (!e.target.closest?.("[data-notif-root]")) setNotifOpen(false); };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [notifOpen]);
+
+  useEffect(() => { dataRef.current = data; }, [data]);
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
+
+  const refreshFromServer = useCallback(async () => {
+    if (!authHydrated || syncBusyRef.current) return;
+    if (Date.now() < skipSyncUntilRef.current) return;
+    if (isFormOpen) return;
+    syncBusyRef.current = true;
+    try {
+      const r = await window.storage.get("ghr:data", { preferRemote: true });
+      if (!r?.value) return;
+      const parsed = normalizeAppData(JSON.parse(r.value));
+      const prev = dataRef.current;
+      if (prev && dataSignature(prev) === dataSignature(parsed)) return;
+      setData(parsed);
+      applySessionFromUsers(parsed.users || []);
+    } catch { /* sync silencieux */ }
+    finally { syncBusyRef.current = false; }
+  }, [authHydrated, isFormOpen, applySessionFromUsers]);
+
+  useEffect(() => {
+    if (!authHydrated) return;
+    const onVis = () => { if (document.visibilityState === "visible") refreshFromServer(); };
+    const onFocus = () => refreshFromServer();
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onFocus);
+    const id = setInterval(refreshFromServer, SYNC_POLL_MS);
+    const unsub = window.storage.subscribe?.((msg) => {
+      if (msg?.key === "ghr:data") refreshFromServer();
+    });
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onFocus);
+      clearInterval(id);
+      unsub?.();
+    };
+  }, [authHydrated, refreshFromServer]);
 
   /* Sauvegarde */
   const save = (next) => {
+    dataRef.current = next;
+    skipSyncUntilRef.current = Date.now() + 2500;
     setData(next);
     try { window.storage.set("ghr:data", JSON.stringify(next)); } catch (e) { /* mode mémoire */ }
   };
@@ -1811,6 +1990,76 @@ export default function GestionPersonnel() {
   });
 
   const empById = (id) => employees.find((e) => e.id === id);
+
+  const notifications = useMemo(() => {
+    const items = [];
+    if (isAdmin) {
+      missions.filter((m) => m.validation === "En attente").forEach((m) => {
+        const e = empById(m.employeeId);
+        items.push({
+          id: `mis-${m.id}`, tone: "amber", title: t("notif.mission"),
+          desc: e ? `${nomComplet(e)} — ${m.destination || m.objet || "—"}` : (m.objet || "—"),
+          view: "validation", time: m.debut || "",
+        });
+      });
+      leaves.filter((l) => l.statut === "En attente").forEach((l) => {
+        const e = empById(l.employeeId);
+        items.push({
+          id: `con-${l.id}`, tone: "amber", title: t("notif.leave"),
+          desc: e ? `${nomComplet(e)} — ${l.type}` : l.type,
+          view: "validation", time: l.debut || "",
+        });
+      });
+    }
+    if (isAdmin || canManage) {
+      const porteurs = [
+        ...actifs.map((e) => ({ e })),
+        ...prestataires.filter((p) => p.statut === "Actif").map((e) => ({ e })),
+        ...visiteurs.map((e) => ({ e })),
+      ];
+      const expired = porteurs.filter(({ e }) => carteExpiree(e));
+      if (expired.length) {
+        items.push({
+          id: "cards-expired", tone: "red", title: t("notif.cardsExpired"),
+          desc: `${expired.length} carte(s) à réémettre`, view: "cards", time: today(),
+        });
+      }
+      const soon = porteurs.filter(({ e }) => !carteExpiree(e) && carteExpireBientot(e));
+      if (soon.length) {
+        items.push({
+          id: "cards-soon", tone: "amber", title: t("notif.cardsSoon"),
+          desc: `${soon.length} carte(s) expirent bientôt`, view: "cards", time: today(),
+        });
+      }
+    }
+    if (isAdmin && users.some((u) => u.identifiant === "admin" && u.motDePasse === "admin123")) {
+      items.push({
+        id: "pwd-default", tone: "red", title: t("notif.defaultPwd"),
+        desc: "Compte admin — changez le mot de passe dans Comptes", view: "accounts", time: today(),
+      });
+    }
+    return items.sort((a, b) => (b.time || "").localeCompare(a.time || ""));
+  }, [missions, leaves, actifs, prestataires, visiteurs, isAdmin, canManage, users, employees, lang]);
+
+  const unreadNotifs = notifications.filter((n) => !readNotifs.includes(n.id)).length;
+
+  const markNotifRead = (id) => {
+    if (!currentUser || readNotifs.includes(id)) return;
+    const next = [...readNotifs, id];
+    setReadNotifs(next);
+    saveNotifIds(currentUser.id, next);
+  };
+  const markAllNotifsRead = () => {
+    if (!currentUser) return;
+    const next = [...new Set([...readNotifs, ...notifications.map((n) => n.id)])];
+    setReadNotifs(next);
+    saveNotifIds(currentUser.id, next);
+  };
+  const openNotif = (n) => {
+    markNotifRead(n.id);
+    setView(n.view);
+    setNotifOpen(false);
+  };
 
   /* Recherche avancée */
   const searchResults = useMemo(() => {
@@ -2730,6 +2979,9 @@ ${bande}
     );
     if (u) {
       setCurrentUser(u);
+      saveSession(u);
+      setShowCover(false);
+      setReadNotifs(readNotifIds(u.id));
       save(withLog(data, "Connexion", u.identifiant, u.identifiant));
       setLoginForm({ identifiant: "", motDePasse: "", error: "" });
       setView("dashboard");
@@ -2761,13 +3013,14 @@ ${bande}
       ? { ...data, users: [...users, { ...f, id: uid() }] }
       : { ...data, users: users.map((u) => (u.id === f.id ? f : u)) };
     save(withLog(next, userModal.mode === "add" ? "Création d'un compte" : "Modification d'un compte", f.identifiant));
-    if (currentUser && f.id === currentUser.id) setCurrentUser(f);
+    if (currentUser && f.id === currentUser.id) { setCurrentUser(f); saveSession(f); }
     setUserModal(null);
   };
 
   const deleteUser = (id) => {
     const u0 = users.find((u) => u.id === id);
     save(withLog({ ...data, users: users.filter((u) => u.id !== id) }, "Suppression d'un compte", u0?.identifiant || id));
+    if (currentUser?.id === id) { clearSession(); setCurrentUser(null); }
     setConfirmDelUser(null);
   };
 
@@ -2786,17 +3039,17 @@ ${bande}
     setDeptModal(null);
   };
 
-  if (!data) {
+  if (!data || !authHydrated) {
     return <div style={{ fontFamily: "system-ui", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted }}>Chargement…</div>;
   }
 
   /* ---------- Page de couverture ---------- */
   if (showCover && !currentUser) {
     return (
-      <main style={{
-        minHeight: "100vh", background: `linear-gradient(160deg, ${C.ink} 0%, #0F1820 100%)`,
+      <main className="gp-auth-screen" style={{
+        background: `linear-gradient(160deg, ${C.ink} 0%, #0F1820 100%)`,
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        padding: 24, fontFamily: "'Segoe UI', system-ui, sans-serif", textAlign: "center",
+        padding: 24, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif", textAlign: "center",
       }}>
         {/* Bande aux couleurs nationales */}
         <div style={{ display: "flex", width: 220, height: 6, borderRadius: 999, overflow: "hidden", marginBottom: 30 }}>
@@ -2843,7 +3096,7 @@ ${bande}
   /* ---------- Écran de connexion ---------- */
   if (!currentUser) {
     return (
-      <main style={{ minHeight: "100vh", background: C.ink, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+      <main className="gp-auth-screen" style={{ background: C.ink, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" }}>
         <div style={{ background: "#fff", borderRadius: 16, padding: "34px 30px", width: "100%", maxWidth: 380 }}>
           <div style={{ display: "flex", width: "100%", height: 4, borderRadius: 999, overflow: "hidden", marginBottom: 20 }}>
             {FLAG.map((c) => <div key={c} style={{ flex: 1, background: c }} />)}
@@ -2924,9 +3177,9 @@ ${bande}
   const pendingLeaves = leaves.filter((l) => l.statut === "En attente").length;
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: C.bg, fontFamily: "'Segoe UI', system-ui, sans-serif", color: C.ink }}>
+    <div className="gp-app" style={{ background: C.bg, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif", color: C.ink }}>
       {/* ---------- Barre latérale (fixe, de l'en-tête jusqu'aux comptes) ---------- */}
-      <aside style={{ width: 230, background: C.ink, color: "#DDE5EC", display: "flex", flexDirection: "column", padding: "22px 14px", flexShrink: 0, height: "100vh", overflowY: "auto", position: "sticky", top: 0 }}>
+      <aside className="gp-aside" style={{ width: 230, background: C.ink, color: "#DDE5EC", display: "flex", flexDirection: "column", padding: "22px 14px", position: "sticky", top: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 8px 12px" }}>
           <div style={{ width: 40, height: 40, borderRadius: 9, background: "#22323F", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 4 }}>
             <img src={ARMOIRIES} alt="Armoiries" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
@@ -2995,7 +3248,7 @@ ${bande}
               <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentUser.nom}</div>
               <div style={{ fontSize: 11, color: "#8FA0AE" }}>{roleLabel(currentUser.role)}</div>
             </div>
-            <button onClick={() => { logOnly("Déconnexion", currentUser?.identifiant || ""); setCurrentUser(null); }} title={t("side.logout")}
+            <button onClick={() => { logOnly("Déconnexion", currentUser?.identifiant || ""); clearSession(); setCurrentUser(null); setNotifOpen(false); }} title={t("side.logout")}
               style={{ background: "none", border: "none", cursor: "pointer", color: "#8FA0AE", padding: 4 }}>
               <LogOut size={16} />
             </button>
@@ -3015,7 +3268,67 @@ ${bande}
       </aside>
 
       {/* ---------- Contenu ---------- */}
-      <main style={{ flex: 1, padding: "24px clamp(16px, 3vw, 32px)", minWidth: 0, height: "100vh", overflowY: "auto" }}>
+      <main className="gp-main" style={{ padding: "24px clamp(16px, 3vw, 32px)" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14, position: "sticky", top: 0, zIndex: 25, background: C.bg, paddingBottom: 4 }}>
+          <div data-notif-root style={{ position: "relative" }}>
+            <button type="button" onClick={(e) => { e.stopPropagation(); setNotifOpen((o) => !o); }}
+              aria-label={t("notif.title")} aria-expanded={notifOpen}
+              style={{
+                position: "relative", background: C.card, border: `1px solid ${C.line}`, borderRadius: 10,
+                padding: "9px 12px", cursor: "pointer", color: C.inkSoft, display: "flex", alignItems: "center", gap: 8,
+              }}>
+              <Bell size={18} />
+              {unreadNotifs > 0 && (
+                <span style={{
+                  position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 999,
+                  background: C.red, color: "#fff", fontSize: 11, fontWeight: 700, display: "flex",
+                  alignItems: "center", justifyContent: "center", padding: "0 4px",
+                }}>{unreadNotifs > 9 ? "9+" : unreadNotifs}</span>
+              )}
+            </button>
+            {notifOpen && (
+              <div style={{
+                position: "absolute", right: 0, top: "calc(100% + 8px)", width: "min(360px, 88vw)",
+                background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, boxShadow: "0 12px 32px rgba(15,24,32,0.14)",
+                overflow: "hidden",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.line}` }}>
+                  <strong style={{ fontSize: 14 }}>{t("notif.title")}</strong>
+                  {notifications.length > 0 && unreadNotifs > 0 && (
+                    <button type="button" onClick={markAllNotifsRead}
+                      style={{ background: "none", border: "none", color: C.teal, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                      {t("notif.markAll")}
+                    </button>
+                  )}
+                </div>
+                <div style={{ maxHeight: 360, overflowY: "auto" }}>
+                  {notifications.length === 0 ? (
+                    <div style={{ padding: "28px 16px", textAlign: "center", color: C.muted, fontSize: 13 }}>{t("notif.empty")}</div>
+                  ) : notifications.map((n) => {
+                    const unread = !readNotifs.includes(n.id);
+                    const tone = n.tone === "red" ? C.redSoft : C.amberSoft;
+                    const toneColor = n.tone === "red" ? C.red : "#9A6B14";
+                    return (
+                      <button key={n.id} type="button" onClick={() => openNotif(n)}
+                        style={{
+                          display: "block", width: "100%", textAlign: "left", border: "none", borderBottom: `1px solid ${C.line}`,
+                          background: unread ? tone : "#fff", padding: "12px 14px", cursor: "pointer",
+                        }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                          {unread && <span style={{ width: 7, height: 7, borderRadius: 999, background: toneColor, marginTop: 6, flexShrink: 0 }} />}
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}>{n.title}</div>
+                            <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2, lineHeight: 1.4 }}>{n.desc}</div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* ===== TABLEAU DE BORD ===== */}
         {view === "dashboard" && (
@@ -3121,7 +3434,7 @@ ${bande}
             </div>
 
             <div style={toolbar}>
-              <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
+              <div className="gp-search-wrap" style={{ flex: 1, minWidth: 220 }}>
                 <Search size={16} style={searchIconStyle} />
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un nom, un poste…"
                   style={{ ...inputStyle, paddingLeft: 34 }} />
@@ -3473,8 +3786,8 @@ ${bande}
                       : boardTab === "conge" ? `Agents en congé (${agentsConge.length})`
                       : `Agents actifs au poste (${agentsPoste.length})`}
                   </h2>
-                  <div style={{ position: "relative", minWidth: 220 }}>
-                    <Search size={15} style={{ position: "absolute", left: 10, top: 11, color: C.muted }} />
+                  <div className="gp-search-wrap" style={{ minWidth: 220 }}>
+                    <Search size={15} style={searchIconStyle} />
                     <input value={boardSearch} onChange={(e) => setBoardSearch(e.target.value)} placeholder="Rechercher un agent…"
                       style={{ ...inputStyle, paddingLeft: 31 }} />
                   </div>
@@ -3597,8 +3910,8 @@ ${bande}
             <div style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, padding: 18, marginBottom: 16 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
                 <Field label="Mot-clé">
-                  <div style={{ position: "relative" }}>
-                    <Search size={15} style={{ position: "absolute", left: 10, top: 11, color: C.muted }} />
+                  <div className="gp-search-wrap">
+                    <Search size={15} style={searchIconStyle} />
                     <input style={{ ...inputStyle, paddingLeft: 31 }} placeholder="Nom, poste, email…"
                       value={advSearch.q} onChange={(e) => setAdvSearch({ ...advSearch, q: e.target.value })} />
                   </div>
@@ -3762,7 +4075,7 @@ ${bande}
                       }}>{o.l}</button>
                   ))}
                 </div>
-                <div style={{ position: "relative", flex: 1, minWidth: 220, maxWidth: 380 }}>
+                <div className="gp-search-wrap" style={{ flex: 1, minWidth: 220, maxWidth: 380 }}>
                   <Search size={16} style={searchIconStyle} />
                   <input value={cardSearch} onChange={(e) => setCardSearch(e.target.value)}
                     placeholder="Rechercher un nom, un matricule, un département…"
@@ -3982,7 +4295,7 @@ ${bande}
 
             {/* Recherche et filtre par société */}
             <div style={toolbar}>
-              <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
+              <div className="gp-search-wrap" style={{ flex: 1, minWidth: 220 }}>
                 <Search size={16} style={searchIconStyle} />
                 <input value={prestSearch} onChange={(e) => setPrestSearch(e.target.value)} placeholder="Rechercher un nom, une fonction, une société…"
                   style={{ ...inputStyle, paddingLeft: 34 }} />
@@ -4291,7 +4604,7 @@ ${bande}
               <p style={{ fontSize: 13, color: C.muted, marginTop: 0, marginBottom: 16 }}>
                 Pièces numérisées des dossiers des agents : diplômes, actes, décisions, pièces d'identité… (image ou PDF, 3 Mo max par pièce).
               </p>
-              <div style={{ position: "relative", maxWidth: 380, marginBottom: 14 }}>
+              <div className="gp-search-wrap" style={{ maxWidth: 380, marginBottom: 14 }}>
                 <Search size={16} style={searchIconStyle} />
                 <input value={docSearch} onChange={(e) => setDocSearch(e.target.value)}
                   placeholder="Rechercher un agent, un intitulé…" style={{ ...inputStyle, paddingLeft: 34 }} />
@@ -4366,7 +4679,7 @@ ${bande}
               <p style={{ fontSize: 13, color: C.muted, marginTop: 0, marginBottom: 16 }}>
                 Registre des décrets : saisissez le texte pour l'exporter en Word authentifié, ou joignez le scan d'un décret existant.
               </p>
-              <div style={{ position: "relative", maxWidth: 380, marginBottom: 14 }}>
+              <div className="gp-search-wrap" style={{ maxWidth: 380, marginBottom: 14 }}>
                 <Search size={16} style={searchIconStyle} />
                 <input value={decretSearch} onChange={(e) => setDecretSearch(e.target.value)}
                   placeholder="Rechercher un numéro, un objet…" style={{ ...inputStyle, paddingLeft: 34 }} />
@@ -4671,7 +4984,7 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
                 Toutes les actions des utilisateurs sont horodatées : connexions, créations, modifications, suppressions, validations et exports de documents. Le journal conserve les 1 500 dernières actions. Les administrateurs peuvent supprimer des entrées — chaque suppression est elle-même tracée.
               </p>
               <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-                <div style={{ position: "relative", flex: 1, minWidth: 220, maxWidth: 380 }}>
+                <div className="gp-search-wrap" style={{ flex: 1, minWidth: 220, maxWidth: 380 }}>
                   <Search size={16} style={searchIconStyle} />
                   <input value={journalSearch} onChange={(e) => setJournalSearch(e.target.value)}
                     placeholder="Rechercher une action, un nom…" style={{ ...inputStyle, paddingLeft: 34 }} />
@@ -5659,7 +5972,7 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
               })()}
             </Field>
             <Field label="Texte du décret (pour l'export Word)">
-              <textarea rows={7} style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }}
+              <textarea rows={7} style={textareaStyle}
                 placeholder={"Vu la Constitution…\nVu le décret n° … ;\n\nDÉCRÈTE :\n\nArticle 1er : …\nArticle 2 : …"}
                 value={decretModal.form.texte || ""} onChange={(e) => setDecretModal((m) => ({ ...m, form: { ...m.form, texte: e.target.value } }))} />
             </Field>
