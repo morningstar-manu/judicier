@@ -6,8 +6,14 @@ const SYNC_CHANNEL = typeof BroadcastChannel !== "undefined" ? new BroadcastChan
 
 const REMOTE_MIN_INTERVAL_MS = 45_000;
 const VERSION_CHECK_MS = 20_000;
+const DOC_PREFIX = "ghr:doc:";
+const DOC_CACHE_MAX = 2;
+const DOC_CACHE_MAX_BYTES = 4 * 1024 * 1024;
 
 const memoryCache = new Map();
+const docCache = new Map();
+
+const isDocKey = (key) => key.startsWith(DOC_PREFIX);
 
 function openDb() {
   return new Promise((resolve, reject) => {
@@ -53,6 +59,7 @@ function getCache(key) {
 }
 
 function setCache(key, value, version = "") {
+  if (isDocKey(key)) return;
   const now = Date.now();
   memoryCache.set(key, { value, version: String(version || ""), at: now, versionAt: now });
 }
@@ -69,6 +76,40 @@ function bumpVersionCheck(key) {
 
 function invalidateCache(key) {
   memoryCache.delete(key);
+}
+
+function docCacheBytes() {
+  let n = 0;
+  for (const e of docCache.values()) n += e.size || 0;
+  return n;
+}
+
+function evictOldestDoc() {
+  let oldestKey = null;
+  let oldestAt = Infinity;
+  for (const [k, e] of docCache) {
+    if (e.at < oldestAt) { oldestAt = e.at; oldestKey = k; }
+  }
+  if (oldestKey) docCache.delete(oldestKey);
+}
+
+function getDocCache(key) {
+  const entry = docCache.get(key);
+  if (!entry) return null;
+  entry.at = Date.now();
+  return entry;
+}
+
+function setDocCache(key, value, version = "") {
+  const size = value?.length || 0;
+  while (docCache.size >= DOC_CACHE_MAX || (docCacheBytes() + size > DOC_CACHE_MAX_BYTES && docCache.size > 0)) {
+    evictOldestDoc();
+  }
+  docCache.set(key, { value, version: String(version || ""), at: Date.now(), size });
+}
+
+function invalidateDocCache(key) {
+  docCache.delete(key);
 }
 
 async function apiRequest(method, key, value, { meta, ifNoneMatch, bust } = {}) {
@@ -113,16 +154,61 @@ async function remoteGetFull(key, { ifNoneMatch, bust = true } = {}) {
 }
 
 function notifyPeers(key, version) {
+  if (isDocKey(key)) return;
   try { SYNC_CHANNEL?.postMessage({ key, version, t: Date.now() }); } catch { /* ignore */ }
 }
 
 async function readLocal(key) {
+  if (isDocKey(key)) return null;
   const value = await idbGet(key);
   return value == null ? null : { key, value };
 }
 
+async function getDoc(key, { force = false } = {}) {
+  const cached = !force ? getDocCache(key) : null;
+  try {
+    const etag = cached?.version ? `"${cached.version}"` : undefined;
+    const remote = await remoteGetFull(key, { ifNoneMatch: etag, bust: force });
+    if (remote?.unchanged && cached?.value != null) {
+      return { key, value: cached.value, version: cached.version };
+    }
+    if (remote?.value != null) {
+      setDocCache(key, remote.value, remote.version);
+      return { key: remote.key, value: remote.value, version: remote.version };
+    }
+  } catch (err) {
+    console.warn("[storage] Lecture scan indisponible:", err.message);
+    if (cached?.value != null) return { key, value: cached.value, version: cached.version };
+  }
+  return null;
+}
+
+async function setDoc(key, value) {
+  invalidateDocCache(key);
+  try {
+    await apiRequest("PUT", key, value);
+  } catch (err) {
+    console.warn("[storage] Enregistrement scan échoué:", err.message);
+    throw err;
+  }
+}
+
+async function deleteDoc(key) {
+  invalidateDocCache(key);
+  try {
+    await apiRequest("DELETE", key);
+  } catch (err) {
+    console.warn("[storage] Suppression scan échouée:", err.message);
+    throw err;
+  }
+}
+
 window.storage = {
   async get(key, { preferRemote = false, force = false } = {}) {
+    if (isDocKey(key)) {
+      return getDoc(key, { force });
+    }
+
     if (USE_LOCAL) {
       return readLocal(key);
     }
@@ -186,6 +272,11 @@ window.storage = {
   },
 
   async set(key, value) {
+    if (isDocKey(key)) {
+      await setDoc(key, value);
+      return;
+    }
+
     const version = String(Date.now());
     setCache(key, value, version);
 
@@ -209,6 +300,11 @@ window.storage = {
   },
 
   async delete(key) {
+    if (isDocKey(key)) {
+      await deleteDoc(key);
+      return;
+    }
+
     invalidateCache(key);
 
     if (USE_LOCAL) {
@@ -236,6 +332,10 @@ window.storage = {
   },
 
   stale(key) {
+    if (isDocKey(key)) {
+      invalidateDocCache(key);
+      return;
+    }
     const entry = memoryCache.get(key);
     if (entry) entry.versionAt = 0;
   },

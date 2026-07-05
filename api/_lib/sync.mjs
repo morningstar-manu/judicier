@@ -548,13 +548,22 @@ export async function saveState(data) {
 }
 
 export async function getFile(key) {
+  const meta = await getFileMeta(key);
+  return meta?.contenu ?? null;
+}
+
+export async function getFileMeta(key) {
   await ensureSchema();
   const db = getTurso();
   const r = await db.execute({
-    sql: "SELECT contenu FROM fichiers WHERE cle = ?",
+    sql: "SELECT contenu, maj_le FROM fichiers WHERE cle = ?",
     args: [key],
   });
-  return r.rows[0]?.contenu ?? null;
+  if (!r.rows[0]) return null;
+  return {
+    contenu: r.rows[0].contenu,
+    version: String(r.rows[0].maj_le || ""),
+  };
 }
 
 export async function setFile(key, value) {

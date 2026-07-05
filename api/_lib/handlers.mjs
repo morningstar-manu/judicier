@@ -1,6 +1,6 @@
 import {
   deleteFile,
-  getFile,
+  getFileMeta,
   loadState,
   loadStateVersion,
   saveState,
@@ -114,12 +114,25 @@ export async function handleStorageRequest(method, url, bodyText, { headers = {}
 
     if (key.startsWith("ghr:doc:")) {
       if (method === "GET") {
-        const contenu = await getFile(key);
-        if (contenu == null) {
+        const file = await getFileMeta(key);
+        if (file == null) {
           return {
             status: 404,
             headers: { ...corsHeaders(), "Content-Type": "application/json" },
             body: JSON.stringify({ error: "not_found" }),
+          };
+        }
+        const version = file.version || "0";
+        const ifNoneMatch = headers["if-none-match"] || headers["If-None-Match"];
+        if (ifNoneMatch && ifNoneMatch === etag(version)) {
+          return {
+            status: 304,
+            headers: {
+              ...corsHeaders(),
+              ETag: etag(version),
+              "Cache-Control": "private, max-age=300",
+            },
+            body: "",
           };
         }
         return {
@@ -127,9 +140,10 @@ export async function handleStorageRequest(method, url, bodyText, { headers = {}
           headers: {
             ...corsHeaders(),
             "Content-Type": "application/json",
+            ETag: etag(version),
             "Cache-Control": "private, max-age=300",
           },
-          body: JSON.stringify({ key, value: contenu }),
+          body: JSON.stringify({ key, value: file.contenu, version }),
         };
       }
       if (method === "PUT") {
