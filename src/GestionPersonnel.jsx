@@ -11,6 +11,7 @@ import {
   valCarte,
   fmtCourt,
   carteExpiree,
+  defaultValidite,
   authCode,
   decretAuthCode,
   congeAuthCode,
