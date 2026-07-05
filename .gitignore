@@ -5,3 +5,6 @@ dist
 .env
 .env.local
 .vercel
+eng.traineddata
+mobile/node_modules
+.expo

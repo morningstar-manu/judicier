@@ -251,6 +251,24 @@ export async function loadState() {
     cible: r.cible,
   }));
 
+  const bagRes = await db.execute(`
+    SELECT client_id, agent_id, agent_nom, visiteur_id, lieu, date_controle,
+           type_objet, statut, photo_id, notes, cree_le FROM controles_bagages
+  `).catch(() => ({ rows: [] }));
+  const bagages = bagRes.rows.map((r) => ({
+    id: r.client_id,
+    agentId: r.agent_id || "",
+    agentNom: r.agent_nom || "",
+    visiteurId: r.visiteur_id || "",
+    lieu: r.lieu || "",
+    dateControle: r.date_controle,
+    typeObjet: r.type_objet || "Bagage",
+    statut: r.statut || "Conforme",
+    photoId: r.photo_id || "",
+    notes: r.notes || "",
+    creeLe: r.cree_le || "",
+  }));
+
   return {
     secret: pmap.secret,
     lang: pmap.langue || "fr",
@@ -269,6 +287,7 @@ export async function loadState() {
     dossiers,
     decrets,
     journal,
+    bagages,
   };
 }
 
@@ -278,6 +297,7 @@ export async function saveState(data) {
   const batch = [];
 
   batch.push({ sql: "DELETE FROM journal" });
+  batch.push({ sql: "DELETE FROM controles_bagages" });
   batch.push({ sql: "DELETE FROM dossiers_documents" });
   batch.push({ sql: "DELETE FROM decrets" });
   batch.push({ sql: "DELETE FROM presences" });
@@ -530,6 +550,27 @@ export async function saveState(data) {
         dc.fichierId || null,
         dc.nomFichier || null,
         dc.creePar || null,
+      ],
+    });
+  }
+
+  for (const b of data.bagages || []) {
+    batch2.push({
+      sql: `INSERT INTO controles_bagages (client_id, agent_id, agent_nom, visiteur_id, lieu,
+            date_controle, type_objet, statut, photo_id, notes, cree_le)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        b.id,
+        b.agentId || "",
+        b.agentNom || "",
+        b.visiteurId || "",
+        b.lieu || "",
+        b.dateControle,
+        b.typeObjet || "Bagage",
+        b.statut || "Conforme",
+        b.photoId || "",
+        b.notes || "",
+        b.creeLe || new Date().toISOString(),
       ],
     });
   }

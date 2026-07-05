@@ -7,14 +7,21 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "turso:init": "node scripts/turso-init.mjs"
+    "turso:init": "node scripts/turso-init.mjs",
+    "mobile": "npm run start --prefix mobile",
+    "mobile:dev": "npm run start:dev-client --prefix mobile",
+    "mobile:android": "npm run android --prefix mobile",
+    "mobile:build:apk": "npm run build:apk --prefix mobile"
   },
   "dependencies": {
     "@libsql/client": "^0.15.9",
     "@vercel/analytics": "^2.0.1",
+    "bcryptjs": "^3.0.2",
     "lucide-react": "^0.511.0",
+    "mrz": "^4.2.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "tesseract.js": "^6.0.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

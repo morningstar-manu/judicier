@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "GestiPers Terrain",
+    "slug": "gestipers-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#0E7C7B"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0E7C7B"
+      },
+      "package": "org.gestipers.terrain",
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
+    },
+    "plugins": [
+      "expo-dev-client",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Autoriser GestiPers à utiliser la caméra pour scanner QR et documents."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Autoriser GestiPers à accéder aux photos pour joindre des scans."
+        }
+      ],
+      "expo-asset",
+      "expo-font"
+    ],
+    "scheme": "gestipers",
+    "extra": {
+      "apiUrl": "https://www.gestipers.org/api/v1"
+    }
+  }
+}

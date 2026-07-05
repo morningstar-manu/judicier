@@ -41,6 +41,20 @@ export async function ensureSchema() {
   const migrations = [
     "ALTER TABLE audiences ADD COLUMN piece_fichier_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE audiences ADD COLUMN piece_nom_fichier TEXT NOT NULL DEFAULT ''",
+    `CREATE TABLE IF NOT EXISTS controles_bagages (
+      client_id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL DEFAULT '',
+      agent_nom TEXT NOT NULL DEFAULT '',
+      visiteur_id TEXT NOT NULL DEFAULT '',
+      lieu TEXT NOT NULL DEFAULT '',
+      date_controle TEXT NOT NULL,
+      type_objet TEXT NOT NULL DEFAULT 'Bagage',
+      statut TEXT NOT NULL DEFAULT 'Conforme',
+      photo_id TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      cree_le TEXT DEFAULT (datetime('now'))
+    )`,
+    "CREATE INDEX IF NOT EXISTS idx_bagages_date ON controles_bagages(date_controle)",
   ];
   for (const stmt of migrations) {
     try { await db.execute(stmt); } catch { /* colonne déjà présente */ }

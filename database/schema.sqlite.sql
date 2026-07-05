@@ -179,3 +179,19 @@ CREATE INDEX IF NOT EXISTS idx_audiences_piece ON audiences(numero_piece);
 CREATE INDEX IF NOT EXISTS idx_agents_dept ON agents(departement_id);
 CREATE INDEX IF NOT EXISTS idx_conges_agent ON conges(agent_id);
 CREATE INDEX IF NOT EXISTS idx_journal_date ON journal(date_action);
+
+CREATE TABLE IF NOT EXISTS controles_bagages (
+  client_id      TEXT PRIMARY KEY,
+  agent_id       TEXT NOT NULL DEFAULT '',
+  agent_nom      TEXT NOT NULL DEFAULT '',
+  visiteur_id    TEXT NOT NULL DEFAULT '',
+  lieu           TEXT NOT NULL DEFAULT '',
+  date_controle  TEXT NOT NULL,
+  type_objet     TEXT NOT NULL DEFAULT 'Bagage',
+  statut         TEXT NOT NULL DEFAULT 'Conforme' CHECK (statut IN ('Conforme', 'À inspecter', 'Refusé')),
+  photo_id       TEXT NOT NULL DEFAULT '',
+  notes          TEXT NOT NULL DEFAULT '',
+  cree_le        TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_bagages_date ON controles_bagages(date_controle);

@@ -6,6 +6,23 @@ import {
   Download, FileText, FileSpreadsheet, CreditCard, Printer, UserPlus, Building2, Plane, MapPin, BadgeCheck, ChevronDown, ChevronRight, History, BarChart3, FolderOpen, ScrollText, Upload, Bell, Handshake, IdCard, CircleHelp
 } from "lucide-react";
 import GuideUtilisateur from "./GuideUtilisateur.jsx";
+import {
+  matricule,
+  valCarte,
+  fmtCourt,
+  carteExpiree,
+  authCode,
+  decretAuthCode,
+  congeAuthCode,
+  missionAuthCode,
+  extractVerifyFields,
+  computeVerifResult,
+  verifyPieceIdentite,
+  pieceVerifFromNiveau,
+  qrPayload as qrPayloadShared,
+  qrScanUrl as qrScanUrlShared,
+} from "@gestipers/shared/verify.mjs";
+import { hashPassword, verifyPassword } from "@gestipers/shared/password.mjs";
 
 /* ---------- Palette ---------- */
 const C = {
@@ -732,6 +749,7 @@ const normalizeAppData = (parsed) => {
   if (!parsed.evenements) parsed.evenements = [];
   if (!parsed.missions) parsed.missions = [];
   if (!parsed.audiences) parsed.audiences = [];
+  if (!parsed.bagages) parsed.bagages = [];
   parsed.missions.forEach((m) => { if (!m.validation) m.validation = "Validée"; });
   if (!parsed.lang) parsed.lang = "fr";
   if (!parsed.journal) parsed.journal = [];
@@ -1217,16 +1235,6 @@ const nomComplet = (e) => `${e.prenom || ""} ${String(e.nom || "").toUpperCase()
 /* Facteur de taille du nom selon sa longueur, pour tout afficher sans le couper */
 const nomScale = (n) => n.length <= 22 ? 1 : n.length <= 30 ? 0.82 : n.length <= 40 ? 0.68 : n.length <= 52 ? 0.58 : 0.5;
 
-const matricule = (e, kind = "PR") =>
-  (kind === "PR" && e.matriculeOfficiel) ? String(e.matriculeOfficiel).toUpperCase() : kind + "-" + String(e.id).toUpperCase();
-/* Validité de la carte : propre à chaque employé, par défaut fin de l'année prochaine */
-const defaultValidite = () => `${new Date().getFullYear() + 1}-12-31`;
-const valCarte = (e) => e.carteValidite || defaultValidite();
-const fmtCourt = (iso) => {
-  const [y, m, d] = String(iso).split("-");
-  return y && m && d ? `${d}/${m}/${y}` : String(iso);
-};
-const carteExpiree = (e) => valCarte(e) < today();
 const joursAvantExpiration = (e) => {
   const fin = new Date(valCarte(e) + "T12:00:00");
   const now = new Date(today() + "T12:00:00");
@@ -1648,28 +1656,6 @@ const L10N = {
   },
 };
 
-/* Empreinte 8 caractères hexadécimaux d'une chaîne (double hachage FNV/31) */
-const hash8 = (s) => {
-  let h1 = 0x811c9dc5, h2 = 0x1000193;
-  for (let i = 0; i < s.length; i++) {
-    h1 ^= s.charCodeAt(i); h1 = Math.imul(h1, 0x01000193) >>> 0;
-    h2 = (Math.imul(h2, 31) + s.charCodeAt(i)) >>> 0;
-  }
-  return (h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0")).slice(0, 8).toUpperCase();
-};
-
-/* Code d'authentification d'un décret */
-const decretAuthCode = (d, secret) =>
-  hash8(["DC", d.id, d.numero, d.dateDecret, d.objet, secret].join("|"));
-
-/* Code d'authentification d'une décision de congé */
-const congeAuthCode = (l, secret) =>
-  hash8(["CG", l.id, l.employeeId, l.type, l.debut, l.fin, secret].join("|"));
-
-/* Code d'authentification d'un ordre de mission */
-const missionAuthCode = (m, secret) =>
-  hash8(["OM", m.id, m.employeeId, m.objet, m.destination, m.passeport || "", m.debut, m.fin, secret].join("|"));
-
 /* Encodage base64 d'une chaîne UTF-8 + repli MIME à 76 colonnes (documents Word .doc en MHTML) */
 const b64utf8 = (str) => {
   const bytes = new TextEncoder().encode(str);
@@ -1697,34 +1683,27 @@ const qrTableHTML = (text, cell = 3) => {
   } catch (e) { return ""; }
 };
 
-/* Code d'authentification : empreinte des données de la carte + clé secrète de l'installation */
-const authCode = (e, secret, kind = "PR") => {
-  const cfg = CARD_KINDS[kind] || CARD_KINDS.PR;
-  const parts = [matricule(e, kind), e.nom, e.prenom, cfg.ligne2(e), valCarte(e), secret];
-  if (kind !== "PR") parts.push(kind); // conserve la compatibilité des cartes employés déjà émises
-  if (kind === "VI") parts.push(e.categorie || "Standard"); // la catégorie (VIP, VVIP…) est infalsifiable
-  const s = parts.join("|");
-  let h1 = 0x811c9dc5, h2 = 0x1000193;
-  for (let i = 0; i < s.length; i++) {
-    h1 ^= s.charCodeAt(i); h1 = Math.imul(h1, 0x01000193) >>> 0;
-    h2 = (Math.imul(h2, 31) + s.charCodeAt(i)) >>> 0;
-  }
-  return (h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0")).slice(0, 8).toUpperCase();
-};
+/* Code d'authentification : empreinte des données de la carte + clé secrète de l'installation — voir @gestipers/shared */
 
 const qrPayload = (e, secret, kind = "PR") => {
   const cfg = CARD_KINDS[kind] || CARD_KINDS.PR;
-  return ["GESTIPERS", matricule(e, kind), `${String(e.nom || "").toUpperCase()} ${e.prenom || ""}`.trim().slice(0, 34),
-    String(cfg.ligne2(e)).slice(0, 30), fmtCourt(valCarte(e)), authCode(e, secret, kind)].join("|");
+  return qrPayloadShared(e, secret, kind, cfg.ligne2(e));
 };
 
-const APP_ORIGIN = (import.meta.env.VITE_APP_URL || "https://www.gestipers.org").replace(/\/$/, "");
+const APP_ORIGIN = (
+  typeof window !== "undefined" && window.location?.origin
+    ? window.location.origin
+    : (import.meta.env.VITE_APP_URL || "https://www.gestipers.org")
+).replace(/\/$/, "");
 
-const qrScanUrl = (payload) => `${APP_ORIGIN}/?v=${encodeURIComponent(payload)}`;
+const qrScanUrl = (mat, code) => qrScanUrlShared(APP_ORIGIN, mat, code);
 
 const qrCardScanText = (e, secret, kind = "PR") => {
-  try { return qrScanUrl(qrPayload(e, secret, kind)); }
-  catch { return qrPayload(e, secret, kind); }
+  try {
+    return qrScanUrl(matricule(e, kind), authCode(e, secret, kind));
+  } catch {
+    return qrPayload(e, secret, kind);
+  }
 };
 
 const PENDING_VERIFY_KEY = "ghr:pending-verify";
@@ -1737,164 +1716,6 @@ const savePendingVerify = (raw) => {
 const clearPendingVerify = () => {
   try { sessionStorage.removeItem(PENDING_VERIFY_KEY); } catch { /* ignore */ }
 };
-
-const extractVerifyFields = (rawInput, codeFallback = "") => {
-  let raw = String(rawInput || "").trim();
-  if (!raw) return { mat: "", code: String(codeFallback || "").trim().toUpperCase(), raw: "" };
-  try {
-    if (/^https?:\/\//i.test(raw)) {
-      const u = new URL(raw);
-      const q = u.searchParams.get("v") || u.searchParams.get("verify");
-      if (q) raw = decodeURIComponent(q);
-    }
-  } catch { /* ignore */ }
-  if (/%7C/i.test(raw)) {
-    try { raw = decodeURIComponent(raw); } catch { /* ignore */ }
-  }
-  let mat = raw.toUpperCase();
-  let code = String(codeFallback || "").trim().toUpperCase();
-  if (raw.includes("|")) {
-    const p = raw.split("|");
-    if (p[0] === "GESTIPERS") {
-      mat = (p[1] || "").toUpperCase();
-      code = (p[5] || "").trim().toUpperCase() || code;
-    }
-  }
-  return { mat, code, raw };
-};
-
-const computeVerifResult = (matInput, codeInput, ctx) => {
-  const { mat, code } = extractVerifyFields(matInput, codeInput);
-  const { secret, employees, prestataires, visiteurs, missions, leaves, decrets } = ctx;
-  if (!mat) return { ok: false, msg: "Scan ou saisie invalide." };
-  let kind = mat.split("-")[0];
-  if (kind === "OM") {
-    const matNormOM = mat.replace(/[\s.]/g, "");
-    const m = missions.find((x) => "OM-" + String(x.id).toUpperCase() === matNormOM);
-    if (!m) return { ok: false, msg: "Ordre de mission inconnu dans le registre." };
-    if (missionAuthCode(m, secret) !== code) return { ok: false, msg: "Code d'authentification invalide — cet ordre de mission n'a pas été émis par cette installation ou a été falsifié." };
-    if (m.validation === "Refusée") return { ok: false, msg: "Cet ordre de mission a été REFUSÉ — document non valable." };
-    return { ok: true, om: m, emp: employees.find((x) => x.id === m.employeeId) || null };
-  }
-  if (kind === "DC") {
-    const matNormDC = mat.replace(/[\s.]/g, "");
-    const d = decrets.find((x) => "DC-" + String(x.id).toUpperCase() === matNormDC);
-    if (!d) return { ok: false, msg: "Décret inconnu dans le registre." };
-    if (decretAuthCode(d, secret) !== code) return { ok: false, msg: "Code d'authentification invalide — ce décret n'a pas été émis par cette installation ou a été falsifié." };
-    return { ok: true, dc: d };
-  }
-  if (kind === "CG") {
-    const matNormCG = mat.replace(/[\s.]/g, "");
-    const l = leaves.find((x) => "CG-" + String(x.id).toUpperCase() === matNormCG);
-    if (!l) return { ok: false, msg: "Décision de congé inconnue dans le registre." };
-    if (congeAuthCode(l, secret) !== code) return { ok: false, msg: "Code d'authentification invalide — cette décision n'a pas été émise par cette installation ou a été falsifiée." };
-    if (l.statut !== "Approuvé") return { ok: false, msg: "Cette décision de congé n'est pas approuvée — document non valable." };
-    return { ok: true, cg: l, emp: employees.find((x) => x.id === l.employeeId) || null };
-  }
-  const pools = { PR: employees, PS: prestataires, VI: visiteurs };
-  let pool = pools[kind];
-  if (!pool) { kind = "PR"; pool = employees; }
-  const matNorm = mat.replace(/[\s.]/g, "");
-  const e = pool.find((x) => matricule(x, kind).replace(/[\s.]/g, "") === matNorm);
-  if (!e) return { ok: false, msg: "Matricule inconnu dans le registre." };
-  if (authCode(e, secret, kind) !== code) return { ok: false, msg: "Code d'authentification invalide — cette carte n'a pas été émise par cette installation ou a été falsifiée." };
-  return { ok: true, emp: e, kind, expiree: carteExpiree(e) };
-};
-
-const normPieceId = (s) => String(s || "").replace(/\s+/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-
-const pieceIdsMatch = (a, b) => {
-  const x = normPieceId(a);
-  const y = normPieceId(b);
-  if (!x || !y) return false;
-  return x === y || (x.length >= 5 && y.length >= 5 && (x.includes(y) || y.includes(x)));
-};
-
-const namesMatchPiece = (nomA, prenomA, nomB, prenomB) => {
-  const n = (s) => String(s || "").trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
-  return n(nomA) === n(nomB) && n(prenomA) === n(prenomB);
-};
-
-const pieceVerifFromNiveau = (niveau) => ({
-  erreur: "Non vérifiée",
-  inconnu: "Doute",
-  doute: "Doute",
-  conforme: "Conforme",
-  non_conforme: "Non conforme",
-}[niveau] || "Non vérifiée");
-
-const verifyPieceIdentite = ({ numero, typePiece, nom, prenom, excludeId }, ctx) => {
-  const num = normPieceId(numero);
-  if (!num || num.length < 4) {
-    return { niveau: "erreur", msg: "Numéro trop court ou invalide (4 caractères minimum).", matches: [], formatOk: false };
-  }
-  const matches = [];
-  const add = (source, personNom, personPrenom, detail, extra = {}) => {
-    matches.push({
-      source,
-      label: `${personPrenom} ${personNom}`.trim(),
-      nom: personNom,
-      prenom: personPrenom,
-      detail,
-      nameOk: namesMatchPiece(nom, prenom, personNom, personPrenom),
-      ...extra,
-    });
-  };
-
-  for (const v of ctx.visiteurs || []) {
-    if (pieceIdsMatch(v.pieceId, numero)) add("Registre visiteurs", v.nom, v.prenom, `Pièce : ${v.pieceId}`, { date: v.dateVisite });
-  }
-  for (const p of ctx.prestataires || []) {
-    if (pieceIdsMatch(p.pieceId, numero)) add("Registre prestataires", p.nom, p.prenom, `Pièce : ${p.pieceId}`, { societe: p.societe });
-  }
-  for (const m of ctx.missions || []) {
-    if (pieceIdsMatch(m.passeport, numero)) {
-      const e = (ctx.employees || []).find((x) => x.id === m.employeeId);
-      add("Ordre de mission", e?.nom || "—", e?.prenom || "", `Passeport : ${m.passeport}`, { objet: m.objet });
-    }
-  }
-  for (const a of (ctx.audiences || []).filter((x) => x.id !== excludeId)) {
-    if (pieceIdsMatch(a.numeroPiece, numero)) add("Demande d'audience", a.nom, a.prenom, `${a.typePiece} ${a.numeroPiece}`, { statut: a.statut });
-  }
-
-  const type = String(typePiece || "CNI").toUpperCase();
-  let formatOk = true;
-  let formatHint = "";
-  if (type === "CNI" && !/^[A-Z0-9]{6,14}$/.test(num)) {
-    formatOk = false;
-    formatHint = "Format CNI inhabituel — vérifiez le numéro saisi.";
-  }
-  if (type.includes("PASS") && !/^[A-Z]{1,2}[0-9]{6,9}$/.test(num)) {
-    formatOk = false;
-    formatHint = "Format passeport inhabituel — vérifiez le numéro saisi.";
-  }
-
-  if (matches.length === 0) {
-    return {
-      niveau: formatOk ? "inconnu" : "doute",
-      msg: formatOk ? "Aucune correspondance dans les registres GestiPers." : formatHint,
-      matches,
-      formatOk,
-    };
-  }
-
-  const hasName = Boolean(String(nom || "").trim() && String(prenom || "").trim());
-  const nameOk = !hasName || matches.some((m) => m.nameOk);
-  const nameBad = hasName && matches.some((m) => !m.nameOk);
-  let niveau = "conforme";
-  let msg = `${matches.length} correspondance(s) trouvée(s) dans les registres.`;
-  if (nameBad && !nameOk) {
-    niveau = "non_conforme";
-    msg = "Le numéro existe mais le nom ne correspond pas aux enregistrements.";
-  } else if (nameBad) {
-    niveau = "doute";
-    msg = "Correspondance partielle — contrôle d'identité recommandé.";
-  }
-  if (!formatOk && niveau === "conforme") niveau = "doute";
-
-  return { niveau, msg, matches, formatOk };
-};
-
 
 const QRSvg = ({ text, size = 64 }) => {
   const qr = useMemo(() => { try { return qrMatrix(text); } catch (e) { return null; } }, [text]);
@@ -2139,8 +1960,13 @@ export default function GestionPersonnel() {
   useEffect(() => {
     if (!authHydrated) return;
     const params = new URLSearchParams(window.location.search);
+    const m = params.get("m");
+    const c = params.get("c");
     const fromUrl = params.get("v") || params.get("verify");
-    if (fromUrl) {
+    if (m && c) {
+      savePendingVerify(qrScanUrl(m, c));
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (fromUrl) {
       savePendingVerify(decodeURIComponent(fromUrl));
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -2909,9 +2735,6 @@ ${leaves.length ? `<table class="donnees"><tr><th>Employé</th><th>Type</th><th>
     const nb = Math.round((new Date(m.fin) - new Date(m.debut)) / 86400000) + 1;
     const bande = `<table width="260" cellspacing="0" cellpadding="0" align="center"><tr>${FLAG.map((c) => `<td height="6" width="52" bgcolor="${c}"></td>`).join("")}</tr></table>`;
     const omCode = missionAuthCode(m, secret);
-    const omPayload = ["GESTIPERS", "OM-" + String(m.id).toUpperCase(),
-      e ? `${String(e.nom).toUpperCase()} ${e.prenom || ""}`.trim().slice(0, 34) : "",
-      String(m.destination || "").slice(0, 24), `${fmtCourt(m.debut)}→${fmtCourt(m.fin)}`, omCode].join("|");
     const ligne = (l, v) => `<tr><td style="width:38%;padding:4px 8px;font-weight:bold">${l}</td><td style="padding:4px 8px;border-bottom:1px dotted #7A8794">${esc(v || "—")}</td></tr>`;
 
     // Photo de l'agent (déjà en JPEG) et armoiries (SVG converti en PNG)
@@ -2959,7 +2782,7 @@ ${photoB64 ? '<td valign="top" width="125" align="right"><img src="photo.jpg" wi
 <p class="just">Les autorités civiles et militaires sont priées de faciliter à l'intéressé(e) l'accomplissement de sa mission et de lui apporter, en cas de besoin, aide et assistance.</p>
 <table width="100%" style="margin-top:26px;border-collapse:collapse"><tr>
 <td valign="bottom" style="width:42%">
-${qrTableHTML(qrScanUrl(omPayload), 3)}
+${qrTableHTML(qrScanUrl("OM-" + String(m.id).toUpperCase(), omCode), 3)}
 <p style="font-size:8pt;color:#555;margin:6px 0 0;line-height:1.4">Authentification : <b>OM-${String(m.id).toUpperCase()}</b> · Code <b>${omCode}</b><br>Scannez le QR avec l'appareil photo : vérification automatique dans GestiPers (connexion requise).</p>
 </td>
 <td valign="top" style="text-align:right">
@@ -2994,9 +2817,6 @@ ${bande}
     const nb = Math.round((new Date(l.fin) - new Date(l.debut)) / 86400000) + 1;
     const bande = `<table width="260" cellspacing="0" cellpadding="0" align="center"><tr>${FLAG.map((c) => `<td height="6" width="52" bgcolor="${c}"></td>`).join("")}</tr></table>`;
     const cgCode = congeAuthCode(l, secret);
-    const cgPayload = ["GESTIPERS", "CG-" + String(l.id).toUpperCase(),
-      e ? `${String(e.nom).toUpperCase()} ${e.prenom || ""}`.trim().slice(0, 34) : "",
-      String(l.type).slice(0, 24), `${fmtCourt(l.debut)}→${fmtCourt(l.fin)}`, cgCode].join("|");
     const ligne = (lab, v) => `<tr><td style="width:38%;padding:4px 8px;font-weight:bold">${lab}</td><td style="padding:4px 8px;border-bottom:1px dotted #7A8794">${esc(v || "—")}</td></tr>`;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Décision de congé ${numero}</title>
 <style>
@@ -3031,7 +2851,7 @@ ${ligne("Service / Direction", e?.departement)}
 <p class="just">L'intéressé(e) devra reprendre son service à l'expiration de la période ci-dessus. La présente décision sera enregistrée et communiquée partout où besoin sera.</p>
 <table width="100%" style="margin-top:26px;border-collapse:collapse"><tr>
 <td valign="bottom" style="width:42%">
-${qrTableHTML(qrScanUrl(cgPayload), 3)}
+${qrTableHTML(qrScanUrl("CG-" + String(l.id).toUpperCase(), cgCode), 3)}
 <p style="font-size:8pt;color:#555;margin:6px 0 0;line-height:1.4">Authentification : <b>CG-${String(l.id).toUpperCase()}</b> · Code <b>${cgCode}</b><br>Scannez le QR avec l'appareil photo : vérification automatique dans GestiPers (connexion requise).</p>
 </td>
 <td valign="top" style="text-align:right">
@@ -3255,7 +3075,6 @@ ${bande}
     const armB64 = await armoiriesPNG();
     const bande = `<table width="260" cellspacing="0" cellpadding="0" align="center"><tr>${FLAG.map((c) => `<td height="6" width="52" bgcolor="${c}"></td>`).join("")}</tr></table>`;
     const dcCode = decretAuthCode(dc, secret);
-    const dcPayload = ["GESTIPERS", "DC-" + String(dc.id).toUpperCase(), String(dc.numero).slice(0, 30), fmtCourt(dc.dateDecret), dcCode].join("|");
     const corps = (dc.texte || "").split(/\n{2,}/).map((p) => `<p class="just">${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Décret n° ${esc(dc.numero)}</title>
 <style>
@@ -3283,7 +3102,7 @@ ${armB64 ? '<div style="text-align:center;margin-top:10px"><img src="armoiries.p
 ${corps || '<p class="just">…</p>'}
 <table width="100%" style="margin-top:26px;border-collapse:collapse"><tr>
 <td valign="bottom" style="width:42%">
-${qrTableHTML(qrScanUrl(dcPayload), 3)}
+${qrTableHTML(qrScanUrl("DC-" + String(dc.id).toUpperCase(), dcCode), 3)}
 <p style="font-size:8pt;color:#555;margin:6px 0 0;line-height:1.4">Authentification : <b>DC-${String(dc.id).toUpperCase()}</b> · Code <b>${dcCode}</b><br>Scannez le QR avec l'appareil photo : vérification automatique dans GestiPers (connexion requise).</p>
 </td>
 <td valign="top" style="text-align:right">
@@ -3366,21 +3185,21 @@ ${bande}
   };
 
   /* Actions comptes et connexion */
-  const tryLogin = () => {
+  const tryLogin = async () => {
     const u = users.find(
-      (x) => x.identifiant.toLowerCase() === loginForm.identifiant.trim().toLowerCase() && x.motDePasse === loginForm.motDePasse
+      (x) => x.identifiant.toLowerCase() === loginForm.identifiant.trim().toLowerCase()
     );
-    if (u) {
-      setCurrentUser(u);
-      saveSession(u);
-      setShowCover(false);
-      setReadNotifs(readNotifIds(u.id));
-      save(withLog(data, "Connexion", u.identifiant, u.identifiant));
-      setLoginForm({ identifiant: "", motDePasse: "", error: "" });
-      setView(readPendingVerify() ? "cards" : "dashboard");
-    } else {
+    if (!u || !(await verifyPassword(loginForm.motDePasse, u.motDePasse))) {
       setLoginForm((f) => ({ ...f, error: "Identifiant ou mot de passe incorrect." }));
+      return;
     }
+    setCurrentUser(u);
+    saveSession(u);
+    setShowCover(false);
+    setReadNotifs(readNotifIds(u.id));
+    save(withLog(data, "Connexion", u.identifiant, u.identifiant));
+    setLoginForm({ identifiant: "", motDePasse: "", error: "" });
+    setView(readPendingVerify() ? "cards" : "dashboard");
   };
 
   const nbAdmins = users.filter((u) => u.role === "Administrateur").length;
@@ -3399,9 +3218,12 @@ ${bande}
     return null;
   };
 
-  const saveUser = () => {
+  const saveUser = async () => {
     const f = { ...userModal.form, nom: userModal.form.nom.trim(), identifiant: userModal.form.identifiant.trim() };
     if (userErrors(f)) return;
+    if (f.motDePasse && !f.motDePasse.startsWith("$2")) {
+      f.motDePasse = await hashPassword(f.motDePasse);
+    }
     const next = userModal.mode === "add"
       ? { ...data, users: [...users, { ...f, id: uid() }] }
       : { ...data, users: users.map((u) => (u.id === f.id ? f : u)) };
