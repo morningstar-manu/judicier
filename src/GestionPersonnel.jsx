@@ -780,6 +780,87 @@ const searchIconStyle = {
   position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: C.muted, pointerEvents: "none",
 };
 
+const suggestBtnStyle = {
+  display: "flex", alignItems: "center", gap: 9, width: "100%", background: "#fff", border: "none",
+  borderBottom: `1px solid ${C.line}`, padding: "7px 10px", cursor: "pointer", textAlign: "left",
+  fontFamily: "inherit", fontSize: 13,
+};
+
+const agentSearchFields = (e) => [e.nom, e.prenom, e.matriculeOfficiel, e.poste, e.departement].join(" ").toLowerCase();
+
+const AgentSearchPicker = ({
+  selected, query, onQueryChange, onSelect, onClear,
+  candidates, placeholder, renderMeta, autoFocus = true,
+}) => {
+  const qs = (query || "").trim().toLowerCase();
+  const suggestions = qs.length >= 2
+    ? candidates.filter((e) => agentSearchFields(e).includes(qs)).slice(0, 8)
+    : [];
+
+  const pick = (id) => (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    onSelect(id);
+  };
+
+  if (selected) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1px solid ${C.line}`, borderRadius: 8, padding: "7px 10px" }}>
+        <Avatar emp={selected} size={30} />
+        <div style={{ flex: 1, fontSize: 13.5 }}>
+          <strong>{selected.prenom} {selected.nom}</strong>
+          {renderMeta && <span style={{ color: C.muted }}> · {renderMeta(selected)}</span>}
+        </div>
+        <button type="button" onClick={onClear} style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, padding: 4 }} title="Changer d'agent" aria-label="Changer d'agent"><X size={16} /></button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <input
+        style={inputStyle}
+        autoFocus={autoFocus}
+        placeholder={placeholder}
+        value={query || ""}
+        onChange={(e) => onQueryChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && suggestions.length > 0) {
+            e.preventDefault();
+            onSelect(suggestions[0].id);
+          }
+          if (e.key === "Escape") onQueryChange("");
+        }}
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
+        role="combobox"
+        aria-expanded={suggestions.length > 0}
+        aria-autocomplete="list"
+      />
+      {suggestions.length > 0 && (
+        <div className="gp-suggest-list" style={{ border: `1px solid ${C.line}`, borderRadius: 8, marginTop: 6, overflow: "hidden" }}>
+          {suggestions.map((e) => (
+            <button
+              key={e.id}
+              type="button"
+              className="gp-suggest-item"
+              onMouseDown={pick(e.id)}
+              style={suggestBtnStyle}
+            >
+              <Avatar emp={e} size={26} />
+              <span><strong>{e.prenom} {e.nom}</strong>{renderMeta && <span style={{ color: C.muted }}> · {renderMeta(e)}</span>}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {qs.length >= 2 && suggestions.length === 0 && (
+        <div style={{ fontSize: 12.5, color: C.muted, marginTop: 6 }}>Aucun agent ne correspond.</div>
+      )}
+    </>
+  );
+};
+
 const pageHead = {
   display: "flex", justifyContent: "space-between", alignItems: "center",
   marginBottom: 18, flexWrap: "wrap", gap: 12,
@@ -3040,7 +3121,7 @@ ${bande}
   };
 
   if (!data || !authHydrated) {
-    return <div style={{ fontFamily: "system-ui", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted }}>Chargement…</div>;
+    return <div className="gp-auth-screen" style={{ fontFamily: "system-ui", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, background: C.bg }}>Chargement…</div>;
   }
 
   /* ---------- Page de couverture ---------- */
@@ -5570,45 +5651,21 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
       {/* ---------- Modale ordre de mission ---------- */}
       {missionModal && (() => {
         const agentSel = empById(missionModal.form.employeeId);
-        const qs = (missionModal.qs || "").trim().toLowerCase();
-        const suggestions = qs.length >= 2
-          ? actifs.filter((e) => [e.nom, e.prenom, e.matriculeOfficiel, e.poste].join(" ").toLowerCase().includes(qs)).slice(0, 8)
-          : [];
         const invalide = !missionModal.form.employeeId || !missionModal.form.objet.trim() || missionModal.form.fin < missionModal.form.debut;
         return (
           <Modal title={missionModal.mode === "add" ? "Nouvel ordre de mission" : "Modifier la mission"} onClose={() => setMissionModal(null)}>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <Field label="Agent">
-                {agentSel ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1px solid ${C.line}`, borderRadius: 8, padding: "7px 10px" }}>
-                    <Avatar emp={agentSel} size={30} />
-                    <div style={{ flex: 1, fontSize: 13.5 }}>
-                      <strong>{agentSel.prenom} {agentSel.nom}</strong>
-                      <span style={{ color: C.muted }}> · {agentSel.poste}{agentSel.matriculeOfficiel ? ` · ${agentSel.matriculeOfficiel}` : ""}</span>
-                    </div>
-                    <button onClick={() => setMissionModal((mm) => ({ ...mm, form: { ...mm.form, employeeId: "" }, qs: "" }))}
-                      style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, padding: 4 }} title="Changer d'agent"><X size={16} /></button>
-                  </div>
-                ) : (
-                  <>
-                    <input style={inputStyle} autoFocus placeholder="Tapez un nom, un matricule… (2 lettres min.)"
-                      value={missionModal.qs || ""} onChange={(e) => setMissionModal((mm) => ({ ...mm, qs: e.target.value }))} />
-                    {suggestions.length > 0 && (
-                      <div style={{ border: `1px solid ${C.line}`, borderRadius: 8, marginTop: 6, overflow: "hidden" }}>
-                        {suggestions.map((e) => (
-                          <button key={e.id} onClick={() => setMissionModal((mm) => ({ ...mm, form: { ...mm.form, employeeId: e.id }, qs: "" }))}
-                            style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "#fff", border: "none", borderBottom: `1px solid ${C.line}`, padding: "7px 10px", cursor: "pointer", textAlign: "left", fontFamily: "inherit", fontSize: 13 }}>
-                            <Avatar emp={e} size={26} />
-                            <span><strong>{e.prenom} {e.nom}</strong> <span style={{ color: C.muted }}>· {e.poste}{e.matriculeOfficiel ? ` · ${e.matriculeOfficiel}` : ""}</span></span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {qs.length >= 2 && suggestions.length === 0 && (
-                      <div style={{ fontSize: 12.5, color: C.muted, marginTop: 6 }}>Aucun agent actif ne correspond.</div>
-                    )}
-                  </>
-                )}
+                <AgentSearchPicker
+                  selected={agentSel}
+                  query={missionModal.qs}
+                  onQueryChange={(qs) => setMissionModal((mm) => ({ ...mm, qs }))}
+                  onSelect={(id) => setMissionModal((mm) => ({ ...mm, form: { ...mm.form, employeeId: id }, qs: "" }))}
+                  onClear={() => setMissionModal((mm) => ({ ...mm, form: { ...mm.form, employeeId: "" }, qs: "" }))}
+                  candidates={actifs}
+                  placeholder="Tapez un nom, un matricule… (2 lettres min.)"
+                  renderMeta={(e) => `${e.poste}${e.matriculeOfficiel ? ` · ${e.matriculeOfficiel}` : ""}`}
+                />
               </Field>
               <Field label="Objet de la mission">
                 <input style={inputStyle} placeholder="Ex : Mission de représentation, atelier régional…"
@@ -5793,43 +5850,20 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
       })()}
 
       {/* ---------- Modale import de document au dossier ---------- */}
-      {docModal && (() => {
-        const agentSel = empById(docModal.form.employeeId);
-        const qs = (docModal.qs || "").trim().toLowerCase();
-        const suggestions = qs.length >= 2
-          ? employees.filter((e) => [e.nom, e.prenom, e.matriculeOfficiel, e.poste].join(" ").toLowerCase().includes(qs)).slice(0, 8)
-          : [];
-        return (
+      {docModal && (() => (
           <Modal title="Scanner / importer un document" onClose={() => setDocModal(null)}>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <Field label="Agent concerné">
-                {agentSel ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1px solid ${C.line}`, borderRadius: 8, padding: "7px 10px" }}>
-                    <Avatar emp={agentSel} size={30} />
-                    <div style={{ flex: 1, fontSize: 13.5 }}>
-                      <strong>{agentSel.prenom} {agentSel.nom}</strong>
-                      <span style={{ color: C.muted }}> · {agentSel.departement}</span>
-                    </div>
-                    <button onClick={() => setDocModal((m) => ({ ...m, form: { ...m.form, employeeId: "" }, qs: "" }))}
-                      style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, padding: 4 }}><X size={16} /></button>
-                  </div>
-                ) : (
-                  <>
-                    <input style={inputStyle} autoFocus placeholder="Tapez un nom, un matricule… (2 lettres min.)"
-                      value={docModal.qs || ""} onChange={(e) => setDocModal((m) => ({ ...m, qs: e.target.value }))} />
-                    {suggestions.length > 0 && (
-                      <div style={{ border: `1px solid ${C.line}`, borderRadius: 8, marginTop: 6, overflow: "hidden" }}>
-                        {suggestions.map((e) => (
-                          <button key={e.id} onClick={() => setDocModal((m) => ({ ...m, form: { ...m.form, employeeId: e.id }, qs: "" }))}
-                            style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "#fff", border: "none", borderBottom: `1px solid ${C.line}`, padding: "7px 10px", cursor: "pointer", textAlign: "left", fontFamily: "inherit", fontSize: 13 }}>
-                            <Avatar emp={e} size={26} />
-                            <span><strong>{e.prenom} {e.nom}</strong> <span style={{ color: C.muted }}>· {e.departement}</span></span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
+                <AgentSearchPicker
+                  selected={empById(docModal.form.employeeId)}
+                  query={docModal.qs}
+                  onQueryChange={(qs) => setDocModal((m) => ({ ...m, qs }))}
+                  onSelect={(id) => setDocModal((m) => ({ ...m, form: { ...m.form, employeeId: id }, qs: "" }))}
+                  onClear={() => setDocModal((m) => ({ ...m, form: { ...m.form, employeeId: "" }, qs: "" }))}
+                  candidates={employees}
+                  placeholder="Tapez un nom, un matricule… (2 lettres min.)"
+                  renderMeta={(e) => e.departement}
+                />
               </Field>
               <Field label="Intitulé du document">
                 <input style={inputStyle} placeholder="Ex : Diplôme de licence, acte de naissance, décision…"
@@ -5866,8 +5900,7 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
               </button>
             </div>
           </Modal>
-        );
-      })()}
+      ))()}
 
       {/* ---------- Confirmation de suppression de document ---------- */}
       {confirmDelDoc && (
@@ -5883,43 +5916,20 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
       )}
 
       {/* ---------- Modale décret ---------- */}
-      {decretModal && (() => {
-        const agentDc = empById(decretModal.form.employeeId);
-        const qsDc = (decretModal.qs || "").trim().toLowerCase();
-        const suggDc = qsDc.length >= 2
-          ? employees.filter((e) => [e.nom, e.prenom, e.matriculeOfficiel, e.poste].join(" ").toLowerCase().includes(qsDc)).slice(0, 8)
-          : [];
-        return (
+      {decretModal && (
         <Modal title={decretModal.mode === "add" ? "Nouveau décret" : "Modifier le décret"} onClose={() => setDecretModal(null)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <Field label="Agent concerné (facultatif)">
-              {agentDc ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1px solid ${C.line}`, borderRadius: 8, padding: "7px 10px" }}>
-                  <Avatar emp={agentDc} size={30} />
-                  <div style={{ flex: 1, fontSize: 13.5 }}>
-                    <strong>{agentDc.prenom} {agentDc.nom}</strong>
-                    <span style={{ color: C.muted }}> · {agentDc.departement}</span>
-                  </div>
-                  <button onClick={() => setDecretModal((m) => ({ ...m, form: { ...m.form, employeeId: "" }, qs: "" }))}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, padding: 4 }}><X size={16} /></button>
-                </div>
-              ) : (
-                <>
-                  <input style={inputStyle} placeholder="Lier ce décret à un agent : tapez un nom… (2 lettres min.)"
-                    value={decretModal.qs || ""} onChange={(e) => setDecretModal((m) => ({ ...m, qs: e.target.value }))} />
-                  {suggDc.length > 0 && (
-                    <div style={{ border: `1px solid ${C.line}`, borderRadius: 8, marginTop: 6, overflow: "hidden" }}>
-                      {suggDc.map((e) => (
-                        <button key={e.id} onClick={() => setDecretModal((m) => ({ ...m, form: { ...m.form, employeeId: e.id }, qs: "" }))}
-                          style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "#fff", border: "none", borderBottom: `1px solid ${C.line}`, padding: "7px 10px", cursor: "pointer", textAlign: "left", fontFamily: "inherit", fontSize: 13 }}>
-                          <Avatar emp={e} size={26} />
-                          <span><strong>{e.prenom} {e.nom}</strong> <span style={{ color: C.muted }}>· {e.departement}</span></span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
+            <Field label="Agent concerné (facultatif — relie le décret à son dossier)">
+              <AgentSearchPicker
+                selected={empById(decretModal.form.employeeId)}
+                query={decretModal.qs}
+                onQueryChange={(qs) => setDecretModal((m) => ({ ...m, qs }))}
+                onSelect={(id) => setDecretModal((m) => ({ ...m, form: { ...m.form, employeeId: id }, qs: "" }))}
+                onClear={() => setDecretModal((m) => ({ ...m, form: { ...m.form, employeeId: "" }, qs: "" }))}
+                candidates={employees}
+                placeholder="Tapez un nom, un matricule… (2 lettres min.)"
+                renderMeta={(e) => e.departement}
+              />
             </Field>
             <div style={formGrid}>
               <Field label="Numéro du décret">
@@ -5934,42 +5944,6 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
             <Field label="Objet (portant…)">
               <input style={inputStyle} placeholder="Ex : nomination d'un Chargé de Mission à la Présidence de la République"
                 value={decretModal.form.objet} onChange={(e) => setDecretModal((m) => ({ ...m, form: { ...m.form, objet: e.target.value } }))} />
-            </Field>
-            <Field label="Agent concerné (facultatif — relie le décret à son dossier)">
-              {(() => {
-                const agentSel = empById(decretModal.form.employeeId);
-                const qs = (decretModal.qs || "").trim().toLowerCase();
-                const suggestions = qs.length >= 2
-                  ? employees.filter((e) => [e.nom, e.prenom, e.matriculeOfficiel, e.poste].join(" ").toLowerCase().includes(qs)).slice(0, 8)
-                  : [];
-                return agentSel ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, border: `1px solid ${C.line}`, borderRadius: 8, padding: "7px 10px" }}>
-                    <Avatar emp={agentSel} size={30} />
-                    <div style={{ flex: 1, fontSize: 13.5 }}>
-                      <strong>{agentSel.prenom} {agentSel.nom}</strong>
-                      <span style={{ color: C.muted }}> · {agentSel.departement}</span>
-                    </div>
-                    <button onClick={() => setDecretModal((m) => ({ ...m, form: { ...m.form, employeeId: "" }, qs: "" }))}
-                      style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, padding: 4 }}><X size={16} /></button>
-                  </div>
-                ) : (
-                  <>
-                    <input style={inputStyle} placeholder="Tapez un nom, un matricule… (2 lettres min.)"
-                      value={decretModal.qs || ""} onChange={(e) => setDecretModal((m) => ({ ...m, qs: e.target.value }))} />
-                    {suggestions.length > 0 && (
-                      <div style={{ border: `1px solid ${C.line}`, borderRadius: 8, marginTop: 6, overflow: "hidden" }}>
-                        {suggestions.map((e) => (
-                          <button key={e.id} onClick={() => setDecretModal((m) => ({ ...m, form: { ...m.form, employeeId: e.id }, qs: "" }))}
-                            style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", background: "#fff", border: "none", borderBottom: `1px solid ${C.line}`, padding: "7px 10px", cursor: "pointer", textAlign: "left", fontFamily: "inherit", fontSize: 13 }}>
-                            <Avatar emp={e} size={26} />
-                            <span><strong>{e.prenom} {e.nom}</strong> <span style={{ color: C.muted }}>· {e.departement}</span></span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
             </Field>
             <Field label="Texte du décret (pour l'export Word)">
               <textarea rows={7} style={textareaStyle}
@@ -6011,8 +5985,7 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
             </button>
           </div>
         </Modal>
-        );
-      })()}
+      )}
 
       {/* ---------- Confirmation de suppression de décret ---------- */}
       {confirmDelDecret && (

@@ -1,0 +1,23 @@
+{
+  "name": "GestiPers",
+  "short_name": "GestiPers",
+  "description": "Système de gestion du personnel — Présidence de la République Centrafricaine",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "theme_color": "#0E7C7B",
+  "background_color": "#182430",
+  "display": "standalone",
+  "lang": "fr"
+}
