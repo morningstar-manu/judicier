@@ -38,5 +38,12 @@ export async function ensureSchema() {
   for (const stmt of statements) {
     await db.execute(stmt);
   }
+  const migrations = [
+    "ALTER TABLE audiences ADD COLUMN piece_fichier_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE audiences ADD COLUMN piece_nom_fichier TEXT NOT NULL DEFAULT ''",
+  ];
+  for (const stmt of migrations) {
+    try { await db.execute(stmt); } catch { /* colonne déjà présente */ }
+  }
   schemaReady = true;
 }

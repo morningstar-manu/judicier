@@ -182,7 +182,8 @@ export async function loadState() {
 
   const audRes = await db.execute(`
     SELECT client_id, nom, prenom, type_piece, numero_piece, nationalite, telephone, email,
-           objet, service_dest, date_souhaitee, heure_souhaitee, statut, piece_verif, notes, cree_le
+           objet, service_dest, date_souhaitee, heure_souhaitee, statut, piece_verif,
+           piece_fichier_id, piece_nom_fichier, notes, cree_le
     FROM audiences
   `);
   const audiences = audRes.rows.map((r) => ({
@@ -200,6 +201,8 @@ export async function loadState() {
     heureSouhaitee: r.heure_souhaitee || "",
     statut: r.statut || "En attente",
     pieceVerif: r.piece_verif || "Non vérifiée",
+    pieceFichierId: r.piece_fichier_id || "",
+    pieceNomFichier: r.piece_nom_fichier || "",
     notes: r.notes || "",
     creeLe: r.cree_le || "",
   }));
@@ -426,8 +429,8 @@ export async function saveState(data) {
     batch2.push({
       sql: `INSERT INTO audiences (client_id, nom, prenom, type_piece, numero_piece, nationalite,
             telephone, email, objet, service_dest, date_souhaitee, heure_souhaitee,
-            statut, piece_verif, notes, cree_le)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            statut, piece_verif, piece_fichier_id, piece_nom_fichier, notes, cree_le)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         a.id,
         a.nom,
@@ -443,6 +446,8 @@ export async function saveState(data) {
         a.heureSouhaitee || "",
         a.statut || "En attente",
         a.pieceVerif || "Non vérifiée",
+        a.pieceFichierId || "",
+        a.pieceNomFichier || "",
         a.notes || "",
         a.creeLe || new Date().toISOString(),
       ],

@@ -129,7 +129,8 @@ const SERVICES_AUDIENCE = ["Cabinet du Président", "Secrétariat général", "P
 const EMPTY_AUDIENCE = {
   nom: "", prenom: "", typePiece: "CNI", numeroPiece: "", nationalite: "Centrafricaine",
   telephone: "", email: "", objet: "", serviceDest: SERVICES_AUDIENCE[0],
-  dateSouhaitee: today(), heureSouhaitee: "09:00", statut: "En attente", pieceVerif: "Non vérifiée", notes: "",
+  dateSouhaitee: today(), heureSouhaitee: "09:00", statut: "En attente", pieceVerif: "Non vérifiée",
+  pieceFichierId: "", pieceNomFichier: "", notes: "",
 };
 const VIS_CATEGORIES = ["Standard", "Officiel", "VIP", "VVIP", "Presse", "Délégation"];
 const VIS_CAT_COLORS = { "Officiel": "#3E6FA8", "VIP": "#7C5CB0", "VVIP": "#B08D2E", "Presse": "#4E8E9A", "Délégation": "#A65D3F" };
@@ -2716,9 +2717,23 @@ ${leaves.length ? `<table class="donnees"><tr><th>Employé</th><th>Type</th><th>
     save(withLog(next, visModal.mode === "add" ? "Enregistrement d'un visiteur" : "Modification d'un visiteur", `${rec.prenom} ${rec.nom}`)); setVisModal(null);
   };
 
-  const saveAudience = () => {
+  const saveAudience = async () => {
     const f = audienceModal.form;
     if (!f.nom.trim() || !f.prenom.trim() || !f.objet.trim()) return;
+    let pieceFichierId = f.pieceFichierId || "";
+    let pieceNomFichier = f.pieceNomFichier || "";
+    if (audienceModal.fichier) {
+      const fid = uid() + uid();
+      try {
+        await window.storage.set(`ghr:doc:${fid}`, audienceModal.fichier.dataUrl);
+      } catch (err) {
+        setAudienceModal((m) => ({ ...m, error: "Échec de l'enregistrement du scan de la pièce d'identité." }));
+        return;
+      }
+      if (pieceFichierId) { try { await window.storage.delete(`ghr:doc:${pieceFichierId}`); } catch (err) {} }
+      pieceFichierId = fid;
+      pieceNomFichier = audienceModal.fichier.nom;
+    }
     const verif = verifyPieceIdentite({
       numero: f.numeroPiece, typePiece: f.typePiece, nom: f.nom, prenom: f.prenom, excludeId: f.id,
     }, verifCtx);
@@ -2729,6 +2744,8 @@ ${leaves.length ? `<table class="donnees"><tr><th>Employé</th><th>Type</th><th>
       objet: f.objet.trim(),
       numeroPiece: String(f.numeroPiece || "").trim(),
       pieceVerif: pieceVerifFromNiveau(verif.niveau),
+      pieceFichierId,
+      pieceNomFichier,
       creeLe: f.creeLe || new Date().toISOString(),
     };
     const next = audienceModal.mode === "add"
@@ -2748,9 +2765,10 @@ ${leaves.length ? `<table class="donnees"><tr><th>Employé</th><th>Type</th><th>
       a0 ? `${a0.prenom} ${a0.nom}` : id));
   };
 
-  const deleteAudience = () => {
+  const deleteAudience = async () => {
     if (!confirmDelAudience) return;
     const it = confirmDelAudience;
+    if (it.pieceFichierId) { try { await window.storage.delete(`ghr:doc:${it.pieceFichierId}`); } catch (err) {} }
     save(withLog({ ...data, audiences: audiences.filter((a) => a.id !== it.id) },
       "Suppression d'une demande d'audience", `${it.prenom} ${it.nom}`));
     setConfirmDelAudience(null);
@@ -3791,7 +3809,7 @@ ${bande}
                 <h1 style={{ margin: "0 0 4px", fontSize: 22 }}>{t("dash.audiences")}</h1>
                 <p style={{ margin: 0, fontSize: 13, color: C.muted }}>{t("dash.audiencesHint")}</p>
               </div>
-              <button onClick={() => setAudienceModal({ mode: "add", form: { ...EMPTY_AUDIENCE, dateSouhaitee: today() } })}
+              <button onClick={() => setAudienceModal({ mode: "add", form: { ...EMPTY_AUDIENCE, dateSouhaitee: today() }, fichier: null, error: "" })}
                 style={btnPrimary}>
                 <Plus size={16} /> Nouvelle demande
               </button>
@@ -3822,7 +3840,7 @@ ${bande}
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
                     <thead>
                       <tr style={{ background: C.bg, borderBottom: `1px solid ${C.line}` }}>
-                        {["Demandeur", "Pièce d'identité", "Objet", "Date souhaitée", "Vérification", "Statut", ""].map((h) => (
+                        {["Demandeur", "Pièce d'identité", "Scan", "Objet", "Date souhaitée", "Vérification", "Statut", ""].map((h) => (
                           <th key={h} style={thCell}>{h}</th>
                         ))}
                       </tr>
@@ -3837,6 +3855,17 @@ ${bande}
                           <td style={tdCell}>
                             <div>{a.typePiece} {a.numeroPiece || "—"}</div>
                             {a.nationalite && <div style={{ fontSize: 12, color: C.muted }}>{a.nationalite}</div>}
+                          </td>
+                          <td style={tdCell}>
+                            {a.pieceFichierId ? (
+                              <button type="button" onClick={() => ouvrirDocStocke(a.pieceFichierId, a.pieceNomFichier)}
+                                title="Ouvrir le scan"
+                                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.tealSoft, color: C.teal, border: "none", borderRadius: 7, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                                <FileText size={14} /> Voir
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: 12, color: C.muted }}>—</span>
+                            )}
                           </td>
                           <td style={tdCell}>{a.objet}</td>
                           <td style={tdCell}>
@@ -3857,7 +3886,7 @@ ${bande}
                                 <button type="button" title="Marquer comme tenue" onClick={() => setAudienceStatut(a.id, "Tenue")} style={{ ...iconBtn, color: C.teal }}><Check size={17} /></button>
                               )}
                               {canManage && (
-                                <button type="button" title="Modifier" onClick={() => setAudienceModal({ mode: "edit", form: { ...a } })} style={{ ...iconBtn, color: C.inkSoft }}><Pencil size={16} /></button>
+                                <button type="button" title="Modifier" onClick={() => setAudienceModal({ mode: "edit", form: { ...a }, fichier: null, error: "" })} style={{ ...iconBtn, color: C.inkSoft }}><Pencil size={16} /></button>
                               )}
                               {isAdmin && (
                                 <button type="button" title="Supprimer" onClick={() => setConfirmDelAudience(a)} style={{ ...iconBtn, color: C.red }}><Trash2 size={16} /></button>
@@ -5997,6 +6026,44 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
                 value={audienceModal.form.numeroPiece || ""}
                 onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, numeroPiece: e.target.value } })} />
             </Field>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Field label={`Scan ${audienceModal.form.typePiece === "Passeport" ? "du passeport" : "de la CNI"} (facultatif — image ou PDF, 3 Mo max)`}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer", background: C.tealSoft, color: C.teal, borderRadius: 8, padding: "8px 13px", fontSize: 12.5, fontWeight: 600 }}>
+                    <Camera size={14} /> Photographier
+                    <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+                      onChange={(ev) => choisirFichier(ev, setAudienceModal)} />
+                  </label>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer", background: C.bg, color: C.inkSoft, border: `1px solid ${C.line}`, borderRadius: 8, padding: "8px 13px", fontSize: 12.5, fontWeight: 600 }}>
+                    <Upload size={14} /> Téléverser un fichier
+                    <input type="file" accept="image/*,.pdf" style={{ display: "none" }}
+                      onChange={(ev) => choisirFichier(ev, setAudienceModal)} />
+                  </label>
+                </div>
+                {audienceModal.fichier ? (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 12.5, color: C.inkSoft, display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <FileText size={14} color={C.teal} /> {audienceModal.fichier.nom} · {fmtTaille(audienceModal.fichier.taille)}
+                      <button type="button" onClick={() => setAudienceModal((m) => ({ ...m, fichier: null }))}
+                        style={{ background: "none", border: "none", color: C.red, cursor: "pointer", padding: 2 }}><X size={13} /></button>
+                    </div>
+                    {audienceModal.fichier.dataUrl?.startsWith("data:image/") && (
+                      <img src={audienceModal.fichier.dataUrl} alt="Aperçu de la pièce"
+                        style={{ maxWidth: "100%", maxHeight: 160, borderRadius: 8, border: `1px solid ${C.line}`, objectFit: "contain" }} />
+                    )}
+                  </div>
+                ) : audienceModal.form.pieceFichierId ? (
+                  <div style={{ marginTop: 8, fontSize: 12.5, color: C.muted, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span>Scan actuel : {audienceModal.form.pieceNomFichier}</span>
+                    <button type="button" onClick={() => ouvrirDocStocke(audienceModal.form.pieceFichierId, audienceModal.form.pieceNomFichier)}
+                      style={{ background: "none", border: "none", color: C.teal, fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+                      Ouvrir
+                    </button>
+                    <span style={{ color: C.muted }}>(un nouveau fichier le remplacera)</span>
+                  </div>
+                ) : null}
+              </Field>
+            </div>
             <Field label="Nationalité"><input style={inputStyle} value={audienceModal.form.nationalite || ""} onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, nationalite: e.target.value } })} /></Field>
             <Field label="Téléphone"><input style={inputStyle} value={audienceModal.form.telephone || ""} onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, telephone: e.target.value } })} /></Field>
             <Field label="E-mail"><input style={inputStyle} type="email" value={audienceModal.form.email || ""} onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, email: e.target.value } })} /></Field>
@@ -6031,6 +6098,7 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
           <p style={{ fontSize: 12.5, color: C.muted, margin: "12px 0 0" }}>
             La pièce d'identité sera automatiquement recoupée avec les registres visiteurs, prestataires et missions à l'enregistrement.
           </p>
+          {audienceModal.error && <div style={{ fontSize: 12.5, color: C.red, marginTop: 10 }}>{audienceModal.error}</div>}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
             <button onClick={() => setAudienceModal(null)} style={btnSecondary}>Annuler</button>
             <button onClick={saveAudience} style={btnPrimary}>Enregistrer</button>

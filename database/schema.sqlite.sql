@@ -111,6 +111,8 @@ CREATE TABLE IF NOT EXISTS audiences (
   heure_souhaitee TEXT NOT NULL DEFAULT '',
   statut          TEXT NOT NULL DEFAULT 'En attente' CHECK (statut IN ('En attente', 'Validée', 'Refusée', 'Tenue')),
   piece_verif     TEXT NOT NULL DEFAULT 'Non vérifiée' CHECK (piece_verif IN ('Non vérifiée', 'Conforme', 'Non conforme', 'Doute')),
+  piece_fichier_id TEXT NOT NULL DEFAULT '',
+  piece_nom_fichier TEXT NOT NULL DEFAULT '',
   notes           TEXT NOT NULL DEFAULT '',
   cree_le         TEXT DEFAULT (datetime('now'))
 );
