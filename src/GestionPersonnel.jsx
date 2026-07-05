@@ -688,7 +688,7 @@ const DEMO = {
   attendance: {},
 };
 
-const SYNC_POLL_MS = 12000;
+const SYNC_POLL_MS = 60000;
 const dataSignature = (d) => (d ? JSON.stringify(d) : "");
 const cloneDemoData = () => ({
   ...DEMO,
@@ -1972,16 +1972,16 @@ export default function GestionPersonnel() {
   useEffect(() => {
     if (!authHydrated) return;
     const onVis = () => { if (document.visibilityState === "visible") refreshFromServer(); };
-    const onFocus = () => refreshFromServer();
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("focus", onFocus);
     const id = setInterval(refreshFromServer, SYNC_POLL_MS);
     const unsub = window.storage.subscribe?.((msg) => {
-      if (msg?.key === "ghr:data") refreshFromServer();
+      if (msg?.key === "ghr:data") {
+        window.storage.stale?.("ghr:data");
+        refreshFromServer();
+      }
     });
     return () => {
       document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("focus", onFocus);
       clearInterval(id);
       unsub?.();
     };
@@ -2112,12 +2112,6 @@ export default function GestionPersonnel() {
           desc: `${soon.length} carte(s) expirent bientôt`, view: "cards", time: today(),
         });
       }
-    }
-    if (isAdmin && users.some((u) => u.identifiant === "admin" && u.motDePasse === "admin123")) {
-      items.push({
-        id: "pwd-default", tone: "red", title: t("notif.defaultPwd"),
-        desc: "Compte admin — changez le mot de passe dans Comptes", view: "accounts", time: today(),
-      });
     }
     return items.sort((a, b) => (b.time || "").localeCompare(a.time || ""));
   }, [missions, leaves, actifs, prestataires, visiteurs, isAdmin, canManage, users, employees, lang]);
@@ -3222,11 +3216,6 @@ ${bande}
               <Lock size={15} /> {t("login.btn")}
             </button>
           </div>
-          {users.length === 1 && users[0].identifiant === "admin" && users[0].motDePasse === "admin123" && (
-            <div style={{ marginTop: 16, fontSize: 12, color: C.inkSoft, background: C.bg, borderRadius: 8, padding: "9px 12px" }}>
-              Première connexion : <strong style={{ color: C.ink }}>admin</strong> / <strong style={{ color: C.ink }}>admin123</strong>. Pensez à changer ce mot de passe dans l'onglet Comptes.
-            </div>
-          )}
         </div>
       </main>
     );

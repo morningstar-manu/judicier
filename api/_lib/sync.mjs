@@ -21,6 +21,19 @@ function num(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+export async function loadStateVersion() {
+  await ensureSchema();
+  const db = getTurso();
+  const secretRes = await db.execute(
+    "SELECT valeur FROM parametres WHERE cle = 'secret' LIMIT 1"
+  ).catch(() => ({ rows: [] }));
+  if (!secretRes.rows.length) return null;
+  const vRes = await db.execute(
+    "SELECT valeur FROM parametres WHERE cle = 'data_version' LIMIT 1"
+  ).catch(() => ({ rows: [] }));
+  return vRes.rows[0]?.valeur ?? "0";
+}
+
 export async function loadState() {
   await ensureSchema();
   const db = getTurso();
@@ -215,6 +228,7 @@ export async function loadState() {
     secret: pmap.secret,
     lang: pmap.langue || "fr",
     tp2026: pmap.tp2026 === "1",
+    dataVersion: pmap.data_version || "0",
     departments,
     users,
     employees,
@@ -260,6 +274,10 @@ export async function saveState(data) {
   batch.push({
     sql: "INSERT INTO parametres (cle, valeur) VALUES (?, ?)",
     args: ["tp2026", data.tp2026 ? "1" : "0"],
+  });
+  batch.push({
+    sql: "INSERT INTO parametres (cle, valeur) VALUES (?, ?)",
+    args: ["data_version", String(Date.now())],
   });
 
   const deptNameToId = new Map();

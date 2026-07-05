@@ -21,7 +21,9 @@ export default defineConfig({
             });
           }
           try {
-            const result = await handleStorageRequest(method, req.url, body);
+            const result = await handleStorageRequest(method, req.url, body, {
+              headers: req.headers || {},
+            });
             for (const [k, v] of Object.entries(result.headers || {})) {
               res.setHeader(k, v);
             }
