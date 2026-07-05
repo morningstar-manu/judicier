@@ -96,6 +96,25 @@ CREATE TABLE IF NOT EXISTS evenements (
   date_fin   TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS audiences (
+  client_id       TEXT PRIMARY KEY,
+  nom             TEXT NOT NULL,
+  prenom          TEXT NOT NULL DEFAULT '',
+  type_piece      TEXT NOT NULL DEFAULT 'CNI',
+  numero_piece    TEXT NOT NULL DEFAULT '',
+  nationalite     TEXT NOT NULL DEFAULT 'Centrafricaine',
+  telephone       TEXT NOT NULL DEFAULT '',
+  email           TEXT NOT NULL DEFAULT '',
+  objet           TEXT NOT NULL DEFAULT '',
+  service_dest    TEXT NOT NULL DEFAULT '',
+  date_souhaitee  TEXT,
+  heure_souhaitee TEXT NOT NULL DEFAULT '',
+  statut          TEXT NOT NULL DEFAULT 'En attente' CHECK (statut IN ('En attente', 'Validée', 'Refusée', 'Tenue')),
+  piece_verif     TEXT NOT NULL DEFAULT 'Non vérifiée' CHECK (piece_verif IN ('Non vérifiée', 'Conforme', 'Non conforme', 'Doute')),
+  notes           TEXT NOT NULL DEFAULT '',
+  cree_le         TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS visiteurs (
   client_id      TEXT PRIMARY KEY,
   nom            TEXT NOT NULL,
@@ -151,6 +170,9 @@ CREATE TABLE IF NOT EXISTS fichiers (
   contenu TEXT NOT NULL,
   maj_le  TEXT DEFAULT (datetime('now'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_audiences_statut ON audiences(statut);
+CREATE INDEX IF NOT EXISTS idx_audiences_piece ON audiences(numero_piece);
 
 CREATE INDEX IF NOT EXISTS idx_agents_dept ON agents(departement_id);
 CREATE INDEX IF NOT EXISTS idx_conges_agent ON conges(agent_id);

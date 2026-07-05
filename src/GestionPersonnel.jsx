@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import {
   Users, LayoutDashboard, CalendarDays, ClipboardCheck, Plus, Search,
   Pencil, Trash2, X, Check, XCircle, Wallet, UserCheck, UserMinus, Briefcase, Camera, Shield, LogOut, Lock,
-  Download, FileText, FileSpreadsheet, CreditCard, Printer, UserPlus, Building2, Plane, MapPin, BadgeCheck, ChevronDown, ChevronRight, History, BarChart3, FolderOpen, ScrollText, Upload, Bell
+  Download, FileText, FileSpreadsheet, CreditCard, Printer, UserPlus, Building2, Plane, MapPin, BadgeCheck, ChevronDown, ChevronRight, History, BarChart3, FolderOpen, ScrollText, Upload, Bell, Handshake, IdCard
 } from "lucide-react";
 
 /* ---------- Palette ---------- */
@@ -124,6 +124,13 @@ const EMPTY_PREST = { nom: "", prenom: "", societe: "", fonction: "", pieceId: "
 const EMPTY_VIS = { nom: "", prenom: "", pieceId: "", motif: "", service: "", evenement: "", categorie: "Standard", photo: "", dateVisite: today(), carteValidite: "" };
 const EMPTY_EVT = { nom: "", lieu: "", dateDebut: today(), dateFin: today() };
 const EMPTY_MISSION = { employeeId: "", objet: "", destination: "", passeport: "", photo: "", debut: today(), fin: today(), validation: "En attente" };
+const TYPE_PIECES = ["CNI", "Passeport", "Autre"];
+const SERVICES_AUDIENCE = ["Cabinet du Président", "Secrétariat général", "Protocole", "Communication", "Affaires politiques", "Autre"];
+const EMPTY_AUDIENCE = {
+  nom: "", prenom: "", typePiece: "CNI", numeroPiece: "", nationalite: "Centrafricaine",
+  telephone: "", email: "", objet: "", serviceDest: SERVICES_AUDIENCE[0],
+  dateSouhaitee: today(), heureSouhaitee: "09:00", statut: "En attente", pieceVerif: "Non vérifiée", notes: "",
+};
 const VIS_CATEGORIES = ["Standard", "Officiel", "VIP", "VVIP", "Presse", "Délégation"];
 const VIS_CAT_COLORS = { "Officiel": "#3E6FA8", "VIP": "#7C5CB0", "VVIP": "#B08D2E", "Presse": "#4E8E9A", "Délégation": "#A65D3F" };
 /* Dégradés de fond de carte par catégorie de visiteur */
@@ -677,6 +684,7 @@ const DEMO = {
   visiteurs: [],
   evenements: [],
   missions: [],
+  audiences: [],
   journal: [],
   dossiers: [],
   decrets: [],
@@ -721,6 +729,7 @@ const normalizeAppData = (parsed) => {
   if (!parsed.visiteurs) parsed.visiteurs = [];
   if (!parsed.evenements) parsed.evenements = [];
   if (!parsed.missions) parsed.missions = [];
+  if (!parsed.audiences) parsed.audiences = [];
   parsed.missions.forEach((m) => { if (!m.validation) m.validation = "Validée"; });
   if (!parsed.lang) parsed.lang = "fr";
   if (!parsed.journal) parsed.journal = [];
@@ -1525,7 +1534,8 @@ const qrSvgString = (text, mm) => {
 /* ---------- Traductions FR / EN / RU (interface) ---------- */
 const L10N = {
   fr: {
-    "nav.dashboard": "Tableau de bord", "nav.employees": "Personnels", "nav.providers": "Prestataires",
+    "nav.dashboard": "Tableau de bord", "nav.audiences": "Audiences", "nav.pieceVerif": "Vérification pièces",
+    "nav.employees": "Personnels", "nav.providers": "Prestataires",
     "nav.visitors": "Visiteurs", "nav.leaves": "Congés", "nav.attendance": "Présences",
     "nav.missions": "Missions", "nav.search": "Recherche", "nav.cards": "Cartes",
     "nav.validation": "Validation", "nav.accounts": "Comptes", "nav.stats": "Statistiques", "nav.dossiers": "Dossiers", "nav.dossierPerso": "Dossiers personnels", "nav.decrets": "Décrets",
@@ -1535,8 +1545,13 @@ const L10N = {
     "notif.title": "Notifications", "notif.empty": "Aucune notification", "notif.markAll": "Tout marquer comme lu",
     "notif.mission": "Mission en attente", "notif.leave": "Congé en attente", "notif.cardsExpired": "Carte(s) expirée(s)",
     "notif.cardsSoon": "Carte(s) à renouveler (30 j)", "notif.defaultPwd": "Mot de passe par défaut actif",
+    "notif.audience": "Audience en attente",
     "dash.title": "Tableau de bord", "dash.export": "Exporter les données",
     "dash.deptHead": "Effectif par département", "dash.lastLeaves": "Dernières demandes de congé",
+    "dash.tabOverview": "Vue d'ensemble", "dash.tabAudiences": "Audiences", "dash.tabVerif": "Vérification pièces",
+    "dash.audiences": "Demandes d'audience", "dash.audiencesHint": "Enregistrement et suivi des sollicitations d'audience auprès de la Présidence.",
+    "dash.verif": "Vérification CNI / passeport", "dash.verifHint": "Recoupement avec les registres visiteurs, prestataires, missions et audiences.",
+    "kpi.audiencesAtt": "Audiences en attente",
     "kpi.actifs": "Agents actifs", "kpi.mission": "En mission aujourd'hui",
     "kpi.missionsOk": "Missions validées", "kpi.missionsAtt": "Missions en attente de validation",
     "kpi.conge": "En congé aujourd'hui", "kpi.leavesAtt": "Demandes de congé en attente",
@@ -1555,7 +1570,8 @@ const L10N = {
     "val.title": "Validation", "acc.title": "Comptes utilisateurs",
   },
   en: {
-    "nav.dashboard": "Dashboard", "nav.employees": "Staff", "nav.providers": "Contractors",
+    "nav.dashboard": "Dashboard", "nav.audiences": "Audiences", "nav.pieceVerif": "ID verification",
+    "nav.employees": "Staff", "nav.providers": "Contractors",
     "nav.visitors": "Visitors", "nav.leaves": "Leave", "nav.attendance": "Attendance",
     "nav.missions": "Missions", "nav.search": "Search", "nav.cards": "Cards",
     "nav.validation": "Validation", "nav.accounts": "Accounts", "nav.stats": "Statistics", "nav.dossiers": "Files", "nav.dossierPerso": "Personnel files", "nav.decrets": "Decrees",
@@ -1565,8 +1581,13 @@ const L10N = {
     "notif.title": "Notifications", "notif.empty": "No notifications", "notif.markAll": "Mark all as read",
     "notif.mission": "Pending mission", "notif.leave": "Pending leave", "notif.cardsExpired": "Expired card(s)",
     "notif.cardsSoon": "Card(s) expiring within 30 days", "notif.defaultPwd": "Default password still active",
+    "notif.audience": "Pending audience request",
     "dash.title": "Dashboard", "dash.export": "Export data",
     "dash.deptHead": "Headcount by department", "dash.lastLeaves": "Latest leave requests",
+    "dash.tabOverview": "Overview", "dash.tabAudiences": "Audiences", "dash.tabVerif": "ID verification",
+    "dash.audiences": "Audience requests", "dash.audiencesHint": "Register and track audience requests to the Presidency.",
+    "dash.verif": "ID / passport check", "dash.verifHint": "Cross-check against visitors, contractors, missions and audience registers.",
+    "kpi.audiencesAtt": "Pending audiences",
     "kpi.actifs": "Active staff", "kpi.mission": "On mission today",
     "kpi.missionsOk": "Approved missions", "kpi.missionsAtt": "Missions awaiting approval",
     "kpi.conge": "On leave today", "kpi.leavesAtt": "Pending leave requests",
@@ -1585,7 +1606,8 @@ const L10N = {
     "val.title": "Validation", "acc.title": "User accounts",
   },
   ru: {
-    "nav.dashboard": "Панель управления", "nav.employees": "Персонал", "nav.providers": "Подрядчики",
+    "nav.dashboard": "Панель управления", "nav.audiences": "Аудиенции", "nav.pieceVerif": "Проверка документов",
+    "nav.employees": "Персонал", "nav.providers": "Подрядчики",
     "nav.visitors": "Посетители", "nav.leaves": "Отпуска", "nav.attendance": "Посещаемость",
     "nav.missions": "Командировки", "nav.search": "Поиск", "nav.cards": "Карты",
     "nav.validation": "Утверждение", "nav.accounts": "Учётные записи", "nav.stats": "Статистика", "nav.dossiers": "Досье", "nav.dossierPerso": "Личные дела", "nav.decrets": "Указы",
@@ -1595,8 +1617,13 @@ const L10N = {
     "notif.title": "Уведомления", "notif.empty": "Нет уведомлений", "notif.markAll": "Отметить все прочитанными",
     "notif.mission": "Командировка на утверждении", "notif.leave": "Отпуск на утверждении", "notif.cardsExpired": "Просроченные карты",
     "notif.cardsSoon": "Карты истекают в течение 30 дней", "notif.defaultPwd": "Используется пароль по умолчанию",
+    "notif.audience": "Заявка на аудиенцию",
     "dash.title": "Панель управления", "dash.export": "Экспорт данных",
     "dash.deptHead": "Штат по подразделениям", "dash.lastLeaves": "Последние заявки на отпуск",
+    "dash.tabOverview": "Обзор", "dash.tabAudiences": "Аудиенции", "dash.tabVerif": "Проверка документов",
+    "dash.audiences": "Заявки на аудиенцию", "dash.audiencesHint": "Регистрация и отслеживание запросов на аудиенцию.",
+    "dash.verif": "Проверка удостоверения / паспорта", "dash.verifHint": "Сверка с реестрами посетителей, подрядчиков и миссий.",
+    "kpi.audiencesAtt": "Аудиенции на рассмотрении",
     "kpi.actifs": "Активный персонал", "kpi.mission": "В командировке сегодня",
     "kpi.missionsOk": "Утверждённые командировки", "kpi.missionsAtt": "Командировки на утверждении",
     "kpi.conge": "В отпуске сегодня", "kpi.leavesAtt": "Заявки на отпуск в ожидании",
@@ -1767,6 +1794,100 @@ const computeVerifResult = (matInput, codeInput, ctx) => {
   if (!e) return { ok: false, msg: "Matricule inconnu dans le registre." };
   if (authCode(e, secret, kind) !== code) return { ok: false, msg: "Code d'authentification invalide — cette carte n'a pas été émise par cette installation ou a été falsifiée." };
   return { ok: true, emp: e, kind, expiree: carteExpiree(e) };
+};
+
+const normPieceId = (s) => String(s || "").replace(/\s+/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+const pieceIdsMatch = (a, b) => {
+  const x = normPieceId(a);
+  const y = normPieceId(b);
+  if (!x || !y) return false;
+  return x === y || (x.length >= 5 && y.length >= 5 && (x.includes(y) || y.includes(x)));
+};
+
+const namesMatchPiece = (nomA, prenomA, nomB, prenomB) => {
+  const n = (s) => String(s || "").trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  return n(nomA) === n(nomB) && n(prenomA) === n(prenomB);
+};
+
+const pieceVerifFromNiveau = (niveau) => ({
+  erreur: "Non vérifiée",
+  inconnu: "Doute",
+  doute: "Doute",
+  conforme: "Conforme",
+  non_conforme: "Non conforme",
+}[niveau] || "Non vérifiée");
+
+const verifyPieceIdentite = ({ numero, typePiece, nom, prenom, excludeId }, ctx) => {
+  const num = normPieceId(numero);
+  if (!num || num.length < 4) {
+    return { niveau: "erreur", msg: "Numéro trop court ou invalide (4 caractères minimum).", matches: [], formatOk: false };
+  }
+  const matches = [];
+  const add = (source, personNom, personPrenom, detail, extra = {}) => {
+    matches.push({
+      source,
+      label: `${personPrenom} ${personNom}`.trim(),
+      nom: personNom,
+      prenom: personPrenom,
+      detail,
+      nameOk: namesMatchPiece(nom, prenom, personNom, personPrenom),
+      ...extra,
+    });
+  };
+
+  for (const v of ctx.visiteurs || []) {
+    if (pieceIdsMatch(v.pieceId, numero)) add("Registre visiteurs", v.nom, v.prenom, `Pièce : ${v.pieceId}`, { date: v.dateVisite });
+  }
+  for (const p of ctx.prestataires || []) {
+    if (pieceIdsMatch(p.pieceId, numero)) add("Registre prestataires", p.nom, p.prenom, `Pièce : ${p.pieceId}`, { societe: p.societe });
+  }
+  for (const m of ctx.missions || []) {
+    if (pieceIdsMatch(m.passeport, numero)) {
+      const e = (ctx.employees || []).find((x) => x.id === m.employeeId);
+      add("Ordre de mission", e?.nom || "—", e?.prenom || "", `Passeport : ${m.passeport}`, { objet: m.objet });
+    }
+  }
+  for (const a of (ctx.audiences || []).filter((x) => x.id !== excludeId)) {
+    if (pieceIdsMatch(a.numeroPiece, numero)) add("Demande d'audience", a.nom, a.prenom, `${a.typePiece} ${a.numeroPiece}`, { statut: a.statut });
+  }
+
+  const type = String(typePiece || "CNI").toUpperCase();
+  let formatOk = true;
+  let formatHint = "";
+  if (type === "CNI" && !/^[A-Z0-9]{6,14}$/.test(num)) {
+    formatOk = false;
+    formatHint = "Format CNI inhabituel — vérifiez le numéro saisi.";
+  }
+  if (type.includes("PASS") && !/^[A-Z]{1,2}[0-9]{6,9}$/.test(num)) {
+    formatOk = false;
+    formatHint = "Format passeport inhabituel — vérifiez le numéro saisi.";
+  }
+
+  if (matches.length === 0) {
+    return {
+      niveau: formatOk ? "inconnu" : "doute",
+      msg: formatOk ? "Aucune correspondance dans les registres GestiPers." : formatHint,
+      matches,
+      formatOk,
+    };
+  }
+
+  const hasName = Boolean(String(nom || "").trim() && String(prenom || "").trim());
+  const nameOk = !hasName || matches.some((m) => m.nameOk);
+  const nameBad = hasName && matches.some((m) => !m.nameOk);
+  let niveau = "conforme";
+  let msg = `${matches.length} correspondance(s) trouvée(s) dans les registres.`;
+  if (nameBad && !nameOk) {
+    niveau = "non_conforme";
+    msg = "Le numéro existe mais le nom ne correspond pas aux enregistrements.";
+  } else if (nameBad) {
+    niveau = "doute";
+    msg = "Correspondance partielle — contrôle d'identité recommandé.";
+  }
+  if (!formatOk && niveau === "conforme") niveau = "doute";
+
+  return { niveau, msg, matches, formatOk };
 };
 
 
@@ -1963,6 +2084,11 @@ export default function GestionPersonnel() {
   const [visCatFilter, setVisCatFilter] = useState("Toutes");
   const [prestSearch, setPrestSearch] = useState("");
   const [prestSocFilter, setPrestSocFilter] = useState("Toutes");
+  const [audienceModal, setAudienceModal] = useState(null);
+  const [audienceFilter, setAudienceFilter] = useState("Toutes");
+  const [audienceSearch, setAudienceSearch] = useState("");
+  const [confirmDelAudience, setConfirmDelAudience] = useState(null);
+  const [pieceVerif, setPieceVerif] = useState({ typePiece: "CNI", numero: "", nom: "", prenom: "", result: null });
 
   const dataRef = useRef(null);
   const skipSyncUntilRef = useRef(0);
@@ -1971,7 +2097,8 @@ export default function GestionPersonnel() {
 
   const isFormOpen = !!(empModal || leaveModal || deptModal || userModal || exportModal
     || prestModal || visModal || carteModal || missionModal || docModal || decretModal
-    || evtModal || confirmDel || confirmDelUser || confirmDelTiers || confirmDelMission
+    || evtModal || audienceModal
+    || confirmDel || confirmDelUser || confirmDelTiers || confirmDelMission || confirmDelAudience
     || confirmDelDoc || confirmDelDecret || confirmPurgeJournal || dossierAgent || ficheAgent);
 
   const applySessionFromUsers = useCallback((userList) => {
@@ -2099,6 +2226,7 @@ export default function GestionPersonnel() {
   const visiteurs = data?.visiteurs || [];
   const evenements = data?.evenements || [];
   const missions = data?.missions || [];
+  const audiences = data?.audiences || [];
   const journal = data?.journal || [];
   const dossiers = data?.dossiers || [];
   const decrets = data?.decrets || [];
@@ -2155,6 +2283,35 @@ export default function GestionPersonnel() {
     return missions.find((m) => m.validation === "Validée" && m.employeeId === empId && m.debut <= t && (!m.fin || m.fin >= t));
   };
   const pendingMissions = missions.filter((m) => m.validation === "En attente").length;
+  const pendingAudiences = audiences.filter((a) => a.statut === "En attente").length;
+
+  const verifCtx = useMemo(() => ({
+    employees, prestataires, visiteurs, missions, audiences,
+  }), [employees, prestataires, visiteurs, missions, audiences]);
+
+  const filteredAudiences = useMemo(() => {
+    const q = audienceSearch.trim().toLowerCase();
+    return [...audiences]
+      .filter((a) => {
+        if (audienceFilter !== "Toutes" && a.statut !== audienceFilter) return false;
+        if (!q) return true;
+        return [a.nom, a.prenom, a.numeroPiece, a.objet, a.serviceDest, a.telephone, a.email].join(" ").toLowerCase().includes(q);
+      })
+      .sort((a, b) => (b.creeLe || b.dateSouhaitee || "").localeCompare(a.creeLe || a.dateSouhaitee || ""));
+  }, [audiences, audienceFilter, audienceSearch]);
+
+  const audienceBadge = (statut) => {
+    if (statut === "Validée") return <Badge bg={C.greenSoft} color={C.green}>Validée</Badge>;
+    if (statut === "Refusée") return <Badge bg={C.redSoft} color={C.red}>Refusée</Badge>;
+    if (statut === "Tenue") return <Badge bg={C.tealSoft} color={C.teal}>Tenue</Badge>;
+    return <Badge bg={C.amberSoft} color="#9A6B14">En attente</Badge>;
+  };
+  const pieceVerifBadge = (v) => {
+    if (v === "Conforme") return <Badge bg={C.greenSoft} color={C.green}>Conforme</Badge>;
+    if (v === "Non conforme") return <Badge bg={C.redSoft} color={C.red}>Non conforme</Badge>;
+    if (v === "Doute") return <Badge bg={C.amberSoft} color="#9A6B14">Doute</Badge>;
+    return <Badge bg={C.bg} color={C.muted}>Non vérifiée</Badge>;
+  };
 
   const filtered = employees.filter((e) => {
     const q = search.toLowerCase();
@@ -2184,6 +2341,13 @@ export default function GestionPersonnel() {
           view: "validation", time: l.debut || "",
         });
       });
+      audiences.filter((a) => a.statut === "En attente").forEach((a) => {
+        items.push({
+          id: `aud-${a.id}`, tone: "amber", title: t("notif.audience"),
+          desc: `${a.prenom} ${a.nom} — ${a.objet || a.serviceDest || "—"}`,
+          view: "audiences", time: a.dateSouhaitee || a.creeLe || "",
+        });
+      });
     }
     if (isAdmin || canManage) {
       const porteurs = [
@@ -2207,7 +2371,7 @@ export default function GestionPersonnel() {
       }
     }
     return items.sort((a, b) => (b.time || "").localeCompare(a.time || ""));
-  }, [missions, leaves, actifs, prestataires, visiteurs, isAdmin, canManage, users, employees, lang]);
+  }, [missions, leaves, audiences, actifs, prestataires, visiteurs, isAdmin, canManage, users, employees, lang]);
 
   const unreadNotifs = notifications.filter((n) => !readNotifs.includes(n.id)).length;
 
@@ -2550,6 +2714,57 @@ ${leaves.length ? `<table class="donnees"><tr><th>Employé</th><th>Type</th><th>
       ? { ...data, visiteurs: [...visiteurs, { ...rec, id: uid() }] }
       : { ...data, visiteurs: visiteurs.map((p) => (p.id === rec.id ? rec : p)) };
     save(withLog(next, visModal.mode === "add" ? "Enregistrement d'un visiteur" : "Modification d'un visiteur", `${rec.prenom} ${rec.nom}`)); setVisModal(null);
+  };
+
+  const saveAudience = () => {
+    const f = audienceModal.form;
+    if (!f.nom.trim() || !f.prenom.trim() || !f.objet.trim()) return;
+    const verif = verifyPieceIdentite({
+      numero: f.numeroPiece, typePiece: f.typePiece, nom: f.nom, prenom: f.prenom, excludeId: f.id,
+    }, verifCtx);
+    const rec = {
+      ...f,
+      nom: f.nom.trim(),
+      prenom: f.prenom.trim(),
+      objet: f.objet.trim(),
+      numeroPiece: String(f.numeroPiece || "").trim(),
+      pieceVerif: pieceVerifFromNiveau(verif.niveau),
+      creeLe: f.creeLe || new Date().toISOString(),
+    };
+    const next = audienceModal.mode === "add"
+      ? { ...data, audiences: [...audiences, { ...rec, id: uid(), statut: isAdmin ? (rec.statut || "En attente") : "En attente" }] }
+      : { ...data, audiences: audiences.map((a) => (a.id === rec.id ? rec : a)) };
+    save(withLog(next, audienceModal.mode === "add" ? "Demande d'audience" : "Modification audience",
+      `${rec.prenom} ${rec.nom} · ${rec.objet}`));
+    setAudienceModal(null);
+  };
+
+  const setAudienceStatut = (id, statut) => {
+    const a0 = audiences.find((x) => x.id === id);
+    save(withLog({
+      ...data,
+      audiences: audiences.map((a) => (a.id === id ? { ...a, statut } : a)),
+    }, statut === "Validée" ? "Audience validée" : statut === "Refusée" ? "Audience refusée" : "Audience tenue",
+      a0 ? `${a0.prenom} ${a0.nom}` : id));
+  };
+
+  const deleteAudience = () => {
+    if (!confirmDelAudience) return;
+    const it = confirmDelAudience;
+    save(withLog({ ...data, audiences: audiences.filter((a) => a.id !== it.id) },
+      "Suppression d'une demande d'audience", `${it.prenom} ${it.nom}`));
+    setConfirmDelAudience(null);
+  };
+
+  const runPieceVerif = () => {
+    const result = verifyPieceIdentite({
+      numero: pieceVerif.numero,
+      typePiece: pieceVerif.typePiece,
+      nom: pieceVerif.nom,
+      prenom: pieceVerif.prenom,
+    }, verifCtx);
+    setPieceVerif((p) => ({ ...p, result }));
+    logOnly("Vérification pièce d'identité", `${pieceVerif.typePiece} ${pieceVerif.numero}`.trim());
   };
 
   const deleteTiers = () => {
@@ -3309,6 +3524,8 @@ ${bande}
 
   const NAV = [
     { id: "dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
+    { id: "audiences", label: t("nav.audiences"), icon: Handshake },
+    { id: "pieceVerif", label: t("nav.pieceVerif"), icon: IdCard },
     { id: "employees", label: t("nav.employees"), icon: Users, children: [
       { id: "providers", label: t("nav.providers"), icon: Building2 },
       { id: "visitors", label: t("nav.visitors"), icon: UserPlus },
@@ -3372,6 +3589,9 @@ ${bande}
             {children && (groupOpen ? <ChevronDown size={14} style={{ opacity: 0.7 }} /> : <ChevronRight size={14} style={{ opacity: 0.7 }} />)}
             {id === "validation" && (pendingMissions + pendingLeaves) > 0 && (
               <span style={{ background: C.amber, color: "#3A2A08", borderRadius: 999, fontSize: 11, fontWeight: 700, padding: "1px 7px" }}>{pendingMissions + pendingLeaves}</span>
+            )}
+            {id === "audiences" && pendingAudiences > 0 && (
+              <span style={{ background: C.amber, color: "#3A2A08", borderRadius: 999, fontSize: 11, fontWeight: 700, padding: "1px 7px" }}>{pendingAudiences}</span>
             )}
           </button>
           {children && groupOpen && children.map(({ id: cid, label: clabel, icon: CIcon }) => (
@@ -3506,6 +3726,7 @@ ${bande}
                 { label: t("kpi.missionsAtt"), value: pendingMissions, icon: Plane, color: "#9A6B14", soft: C.amberSoft, go: "missions" },
                 { label: t("kpi.conge"), value: enCongeAujourdhui.length, icon: UserMinus, color: C.amber, soft: C.amberSoft, go: "leaves" },
                 { label: t("kpi.leavesAtt"), value: pendingLeaves, icon: CalendarDays, color: C.red, soft: C.redSoft, go: "leaves" },
+                { label: t("kpi.audiencesAtt"), value: pendingAudiences, icon: Handshake, color: "#9A6B14", soft: C.amberSoft, go: "audiences" },
               ].map((k) => (
                 <div key={k.label} onClick={() => k.go && setView(k.go)}
                   style={{ background: C.card, borderRadius: 13, padding: 18, border: `1px solid ${C.line}`, display: "flex", gap: 14, alignItems: "center", cursor: k.go ? "pointer" : "default" }}
@@ -3514,7 +3735,7 @@ ${bande}
                     <k.icon size={20} />
                   </div>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: k.small ? 17 : 24, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{k.value}</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{k.value}</div>
                     <div style={{ fontSize: 12.5, color: C.muted }}>{k.label}</div>
                   </div>
                 </div>
@@ -3522,7 +3743,6 @@ ${bande}
             </div>
 
             <div style={cardGrid2}>
-              {/* Effectif par département */}
               <div style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, padding: 20 }}>
                 <h2 style={{ margin: "0 0 14px", fontSize: 15 }}>{t("dash.deptHead")}</h2>
                 {deptNames.map((d) => {
@@ -3540,7 +3760,6 @@ ${bande}
                   );
                 })}
               </div>
-              {/* Dernières demandes */}
               <div style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, padding: 20 }}>
                 <h2 style={{ margin: "0 0 14px", fontSize: 15 }}>{t("dash.lastLeaves")}</h2>
                 {leaves.length === 0 && <div style={{ color: C.muted, fontSize: 13 }}>Aucune demande pour le moment. Ajoutez-en depuis l'onglet Congés.</div>}
@@ -3562,6 +3781,168 @@ ${bande}
               </div>
             </div>
           </>
+        )}
+
+        {/* ===== AUDIENCES ===== */}
+        {view === "audiences" && (
+          <>
+            <div style={{ ...pageHead, marginBottom: 16 }}>
+              <div>
+                <h1 style={{ margin: "0 0 4px", fontSize: 22 }}>{t("dash.audiences")}</h1>
+                <p style={{ margin: 0, fontSize: 13, color: C.muted }}>{t("dash.audiencesHint")}</p>
+              </div>
+              <button onClick={() => setAudienceModal({ mode: "add", form: { ...EMPTY_AUDIENCE, dateSouhaitee: today() } })}
+                style={btnPrimary}>
+                <Plus size={16} /> Nouvelle demande
+              </button>
+            </div>
+
+            <div style={toolbar}>
+              <div className="gp-search-wrap" style={{ flex: 1, minWidth: 220 }}>
+                <Search size={16} style={searchIconStyle} />
+                <input value={audienceSearch} onChange={(e) => setAudienceSearch(e.target.value)}
+                  placeholder="Rechercher nom, pièce, objet…" style={{ ...inputStyle, paddingLeft: 34 }} />
+              </div>
+              <select value={audienceFilter} onChange={(e) => setAudienceFilter(e.target.value)} style={{ ...inputStyle, width: "auto" }}>
+                <option>Toutes</option>
+                <option>En attente</option>
+                <option>Validée</option>
+                <option>Refusée</option>
+                <option>Tenue</option>
+              </select>
+            </div>
+
+            <div style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, overflow: "hidden" }}>
+              {filteredAudiences.length === 0 ? (
+                <div style={{ padding: 28, textAlign: "center", color: C.muted, fontSize: 13 }}>
+                  Aucune demande d'audience. Cliquez sur « Nouvelle demande » pour enregistrer une sollicitation.
+                </div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
+                    <thead>
+                      <tr style={{ background: C.bg, borderBottom: `1px solid ${C.line}` }}>
+                        {["Demandeur", "Pièce d'identité", "Objet", "Date souhaitée", "Vérification", "Statut", ""].map((h) => (
+                          <th key={h} style={thCell}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredAudiences.map((a) => (
+                        <tr key={a.id} style={{ borderBottom: `1px solid ${C.line}` }}>
+                          <td style={tdCell}>
+                            <div style={{ fontWeight: 600 }}>{a.prenom} {a.nom}</div>
+                            <div style={{ fontSize: 12, color: C.muted }}>{a.serviceDest}{a.telephone ? ` · ${a.telephone}` : ""}</div>
+                          </td>
+                          <td style={tdCell}>
+                            <div>{a.typePiece} {a.numeroPiece || "—"}</div>
+                            {a.nationalite && <div style={{ fontSize: 12, color: C.muted }}>{a.nationalite}</div>}
+                          </td>
+                          <td style={tdCell}>{a.objet}</td>
+                          <td style={tdCell}>
+                            {a.dateSouhaitee ? fmtDate(a.dateSouhaitee) : "—"}
+                            {a.heureSouhaitee ? <span style={{ color: C.muted }}> · {a.heureSouhaitee}</span> : null}
+                          </td>
+                          <td style={tdCell}>{pieceVerifBadge(a.pieceVerif)}</td>
+                          <td style={tdCell}>{audienceBadge(a.statut)}</td>
+                          <td style={actionCell}>
+                            <div style={actionBtns}>
+                              {isAdmin && a.statut === "En attente" && (
+                                <>
+                                  <button type="button" title="Valider" onClick={() => setAudienceStatut(a.id, "Validée")} style={{ ...iconBtn, color: C.green }}><Check size={17} /></button>
+                                  <button type="button" title="Refuser" onClick={() => setAudienceStatut(a.id, "Refusée")} style={{ ...iconBtn, color: C.red }}><XCircle size={17} /></button>
+                                </>
+                              )}
+                              {isAdmin && a.statut === "Validée" && (
+                                <button type="button" title="Marquer comme tenue" onClick={() => setAudienceStatut(a.id, "Tenue")} style={{ ...iconBtn, color: C.teal }}><Check size={17} /></button>
+                              )}
+                              {canManage && (
+                                <button type="button" title="Modifier" onClick={() => setAudienceModal({ mode: "edit", form: { ...a } })} style={{ ...iconBtn, color: C.inkSoft }}><Pencil size={16} /></button>
+                              )}
+                              {isAdmin && (
+                                <button type="button" title="Supprimer" onClick={() => setConfirmDelAudience(a)} style={{ ...iconBtn, color: C.red }}><Trash2 size={16} /></button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ===== VÉRIFICATION PIÈCES ===== */}
+        {view === "pieceVerif" && (
+          <div className="gp-verify-panel" style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, padding: 20 }}>
+            <h1 style={{ margin: "0 0 6px", fontSize: 22, display: "flex", alignItems: "center", gap: 8 }}>
+              <IdCard size={22} color={C.teal} /> {t("dash.verif")}
+            </h1>
+            <p style={{ margin: "0 0 18px", fontSize: 13, color: C.muted }}>{t("dash.verifHint")}</p>
+
+            <div className="gp-verify-form" style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 16 }}>
+              <div style={{ flex: "0 0 130px", minWidth: 120 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 5 }}>Type de pièce</div>
+                <select style={inputStyle} value={pieceVerif.typePiece}
+                  onChange={(e) => setPieceVerif((p) => ({ ...p, typePiece: e.target.value, result: null }))}>
+                  {TYPE_PIECES.map((tp) => <option key={tp}>{tp}</option>)}
+                </select>
+              </div>
+              <div style={{ flex: "1 1 180px", minWidth: 160 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 5 }}>N° CNI / passeport</div>
+                <input style={inputStyle} placeholder="Ex : 0123456789 ou PA1234567"
+                  value={pieceVerif.numero}
+                  onChange={(e) => setPieceVerif((p) => ({ ...p, numero: e.target.value, result: null }))}
+                  onKeyDown={(e) => { if (e.key === "Enter") runPieceVerif(); }} />
+              </div>
+              <div style={{ flex: "1 1 140px", minWidth: 120 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 5 }}>Prénom (facultatif)</div>
+                <input style={inputStyle} value={pieceVerif.prenom}
+                  onChange={(e) => setPieceVerif((p) => ({ ...p, prenom: e.target.value, result: null }))} />
+              </div>
+              <div style={{ flex: "1 1 140px", minWidth: 120 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 5 }}>Nom (facultatif)</div>
+                <input style={inputStyle} value={pieceVerif.nom}
+                  onChange={(e) => setPieceVerif((p) => ({ ...p, nom: e.target.value, result: null }))} />
+              </div>
+              <button type="button" onClick={runPieceVerif} style={{ ...btnPrimary, flex: "0 0 auto" }}>
+                <Search size={16} /> Vérifier
+              </button>
+            </div>
+
+            {pieceVerif.result && (() => {
+              const r = pieceVerif.result;
+              const tone = r.niveau === "conforme" ? C.green : r.niveau === "non_conforme" ? C.red : r.niveau === "erreur" ? C.red : "#9A6B14";
+              const bg = r.niveau === "conforme" ? C.greenSoft : r.niveau === "non_conforme" ? C.redSoft : r.niveau === "erreur" ? C.redSoft : C.amberSoft;
+              return (
+                <div style={{ borderRadius: 10, padding: 14, background: bg, border: `1px solid ${tone}33` }}>
+                  <div style={{ fontWeight: 700, color: tone, marginBottom: 6 }}>
+                    {r.niveau === "conforme" ? "Pièce conforme aux registres" : r.niveau === "non_conforme" ? "Non conforme" : r.niveau === "erreur" ? "Saisie invalide" : "Vérification partielle ou sans correspondance"}
+                  </div>
+                  <div style={{ fontSize: 13.5, color: C.inkSoft, marginBottom: r.matches?.length ? 12 : 0 }}>{r.msg}</div>
+                  {r.matches?.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {r.matches.map((m, i) => (
+                        <div key={i} style={{ background: "#fff", borderRadius: 8, padding: "10px 12px", border: `1px solid ${C.line}` }}>
+                          <div style={{ fontWeight: 600, fontSize: 13.5 }}>
+                            {m.label}
+                            {pieceVerif.nom && (
+                              <span style={{ marginLeft: 8, fontSize: 12, color: m.nameOk ? C.green : C.red }}>
+                                {m.nameOk ? "· Nom OK" : "· Nom différent"}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2 }}>{m.source} — {m.detail}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
         )}
 
         {/* ===== EMPLOYÉS ===== */}
@@ -5600,6 +5981,63 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
         </Modal>
       )}
 
+      {/* ---------- Modale demande d'audience ---------- */}
+      {audienceModal && (
+        <Modal title={audienceModal.mode === "add" ? "Nouvelle demande d'audience" : "Modifier la demande d'audience"} onClose={() => setAudienceModal(null)}>
+          <div style={formGrid}>
+            <Field label="Prénom *"><input style={inputStyle} value={audienceModal.form.prenom} onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, prenom: e.target.value } })} /></Field>
+            <Field label="Nom *"><input style={inputStyle} value={audienceModal.form.nom} onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, nom: e.target.value } })} /></Field>
+            <Field label="Type de pièce">
+              <select style={inputStyle} value={audienceModal.form.typePiece} onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, typePiece: e.target.value } })}>
+                {TYPE_PIECES.map((tp) => <option key={tp}>{tp}</option>)}
+              </select>
+            </Field>
+            <Field label="N° CNI / passeport">
+              <input style={inputStyle} placeholder="Ex : 0123456789"
+                value={audienceModal.form.numeroPiece || ""}
+                onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, numeroPiece: e.target.value } })} />
+            </Field>
+            <Field label="Nationalité"><input style={inputStyle} value={audienceModal.form.nationalite || ""} onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, nationalite: e.target.value } })} /></Field>
+            <Field label="Téléphone"><input style={inputStyle} value={audienceModal.form.telephone || ""} onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, telephone: e.target.value } })} /></Field>
+            <Field label="E-mail"><input style={inputStyle} type="email" value={audienceModal.form.email || ""} onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, email: e.target.value } })} /></Field>
+            <Field label="Service destinataire">
+              <select style={inputStyle} value={audienceModal.form.serviceDest} onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, serviceDest: e.target.value } })}>
+                {SERVICES_AUDIENCE.map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </Field>
+            <Field label="Date souhaitée">
+              <input type="date" style={inputStyle} value={audienceModal.form.dateSouhaitee || ""}
+                onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, dateSouhaitee: e.target.value } })} />
+            </Field>
+            <Field label="Heure souhaitée">
+              <input type="time" style={inputStyle} value={audienceModal.form.heureSouhaitee || ""}
+                onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, heureSouhaitee: e.target.value } })} />
+            </Field>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <Field label="Objet de la demande *">
+                <textarea style={textareaStyle} rows={3} value={audienceModal.form.objet}
+                  onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, objet: e.target.value } })} />
+              </Field>
+            </div>
+            {isAdmin && (
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Field label="Notes internes (admin)">
+                  <textarea style={textareaStyle} rows={2} value={audienceModal.form.notes || ""}
+                    onChange={(e) => setAudienceModal({ ...audienceModal, form: { ...audienceModal.form, notes: e.target.value } })} />
+                </Field>
+              </div>
+            )}
+          </div>
+          <p style={{ fontSize: 12.5, color: C.muted, margin: "12px 0 0" }}>
+            La pièce d'identité sera automatiquement recoupée avec les registres visiteurs, prestataires et missions à l'enregistrement.
+          </p>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
+            <button onClick={() => setAudienceModal(null)} style={btnSecondary}>Annuler</button>
+            <button onClick={saveAudience} style={btnPrimary}>Enregistrer</button>
+          </div>
+        </Modal>
+      )}
+
       {/* ---------- Modale visiteur ---------- */}
       {visModal && (
         <Modal title={visModal.mode === "add" ? "Enregistrer un visiteur" : "Modifier le visiteur"} onClose={() => setVisModal(null)}>
@@ -6070,6 +6508,19 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
               style={{ background: C.teal, color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", opacity: (!evtModal.form.nom.trim() || (evtModal.form.dateFin && evtModal.form.dateFin < evtModal.form.dateDebut)) ? 0.5 : 1 }}>
               Enregistrer
             </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ---------- Confirmation suppression audience ---------- */}
+      {confirmDelAudience && (
+        <Modal title="Supprimer cette demande d'audience ?" onClose={() => setConfirmDelAudience(null)}>
+          <p style={{ fontSize: 14, color: C.inkSoft, marginTop: 0 }}>
+            La demande de <strong>{confirmDelAudience.prenom} {confirmDelAudience.nom}</strong> sera définitivement supprimée.
+          </p>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
+            <button onClick={() => setConfirmDelAudience(null)} style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 9, padding: "9px 16px", fontSize: 14, cursor: "pointer", color: C.inkSoft }}>Annuler</button>
+            <button onClick={deleteAudience} style={{ background: C.red, color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Supprimer</button>
           </div>
         </Modal>
       )}

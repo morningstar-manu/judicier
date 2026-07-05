@@ -180,6 +180,30 @@ export async function loadState() {
     carteValidite: r.carte_validite || "",
   }));
 
+  const audRes = await db.execute(`
+    SELECT client_id, nom, prenom, type_piece, numero_piece, nationalite, telephone, email,
+           objet, service_dest, date_souhaitee, heure_souhaitee, statut, piece_verif, notes, cree_le
+    FROM audiences
+  `);
+  const audiences = audRes.rows.map((r) => ({
+    id: r.client_id,
+    nom: r.nom,
+    prenom: r.prenom,
+    typePiece: r.type_piece || "CNI",
+    numeroPiece: r.numero_piece || "",
+    nationalite: r.nationalite || "",
+    telephone: r.telephone || "",
+    email: r.email || "",
+    objet: r.objet || "",
+    serviceDest: r.service_dest || "",
+    dateSouhaitee: r.date_souhaitee || "",
+    heureSouhaitee: r.heure_souhaitee || "",
+    statut: r.statut || "En attente",
+    pieceVerif: r.piece_verif || "Non vérifiée",
+    notes: r.notes || "",
+    creeLe: r.cree_le || "",
+  }));
+
   const dossRes = await db.execute(`
     SELECT client_id, agent_id, intitule, fichier_id, nom_fichier, mime, taille,
            ref_doc, date_ajout, ajoute_par FROM dossiers_documents
@@ -237,6 +261,7 @@ export async function loadState() {
     missions,
     prestataires,
     visiteurs,
+    audiences,
     evenements,
     dossiers,
     decrets,
@@ -256,6 +281,7 @@ export async function saveState(data) {
   batch.push({ sql: "DELETE FROM conges" });
   batch.push({ sql: "DELETE FROM missions" });
   batch.push({ sql: "DELETE FROM visiteurs" });
+  batch.push({ sql: "DELETE FROM audiences" });
   batch.push({ sql: "DELETE FROM prestataires" });
   batch.push({ sql: "DELETE FROM evenements" });
   batch.push({ sql: "DELETE FROM agents" });
@@ -392,6 +418,33 @@ export async function saveState(data) {
         v.dateVisite,
         v.photo || null,
         v.carteValidite || null,
+      ],
+    });
+  }
+
+  for (const a of data.audiences || []) {
+    batch2.push({
+      sql: `INSERT INTO audiences (client_id, nom, prenom, type_piece, numero_piece, nationalite,
+            telephone, email, objet, service_dest, date_souhaitee, heure_souhaitee,
+            statut, piece_verif, notes, cree_le)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        a.id,
+        a.nom,
+        a.prenom || "",
+        a.typePiece || "CNI",
+        a.numeroPiece || "",
+        a.nationalite || "Centrafricaine",
+        a.telephone || "",
+        a.email || "",
+        a.objet || "",
+        a.serviceDest || "",
+        a.dateSouhaitee || null,
+        a.heureSouhaitee || "",
+        a.statut || "En attente",
+        a.pieceVerif || "Non vérifiée",
+        a.notes || "",
+        a.creeLe || new Date().toISOString(),
       ],
     });
   }
