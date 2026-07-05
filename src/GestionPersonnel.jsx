@@ -3,8 +3,9 @@ import * as XLSX from "xlsx";
 import {
   Users, LayoutDashboard, CalendarDays, ClipboardCheck, Plus, Search,
   Pencil, Trash2, X, Check, XCircle, Wallet, UserCheck, UserMinus, Briefcase, Camera, Shield, LogOut, Lock,
-  Download, FileText, FileSpreadsheet, CreditCard, Printer, UserPlus, Building2, Plane, MapPin, BadgeCheck, ChevronDown, ChevronRight, History, BarChart3, FolderOpen, ScrollText, Upload, Bell, Handshake, IdCard
+  Download, FileText, FileSpreadsheet, CreditCard, Printer, UserPlus, Building2, Plane, MapPin, BadgeCheck, ChevronDown, ChevronRight, History, BarChart3, FolderOpen, ScrollText, Upload, Bell, Handshake, IdCard, CircleHelp
 } from "lucide-react";
+import GuideUtilisateur from "./GuideUtilisateur.jsx";
 
 /* ---------- Palette ---------- */
 const C = {
@@ -1539,7 +1540,8 @@ const L10N = {
     "nav.employees": "Personnels", "nav.providers": "Prestataires",
     "nav.visitors": "Visiteurs", "nav.leaves": "Congés", "nav.attendance": "Présences",
     "nav.missions": "Missions", "nav.search": "Recherche", "nav.cards": "Cartes",
-    "nav.validation": "Validation", "nav.accounts": "Comptes", "nav.stats": "Statistiques", "nav.dossiers": "Dossiers", "nav.dossierPerso": "Dossiers personnels", "nav.decrets": "Décrets",
+    "nav.validation": "Validation", "nav.accounts": "Comptes", "nav.stats": "Statistiques", "nav.dossiers": "Dossiers", "nav.dossierPerso": "Dossiers personnels", "nav.decrets": "Décrets", "nav.help": "Aide",
+    "help.title": "Guide d'utilisation",
     "login.id": "Identifiant", "login.pwd": "Mot de passe", "login.btn": "Se connecter",
     "login.sub": "Gestion du personnel",
     "side.files": "dossiers enregistrés", "side.logout": "Se déconnecter",
@@ -1575,7 +1577,8 @@ const L10N = {
     "nav.employees": "Staff", "nav.providers": "Contractors",
     "nav.visitors": "Visitors", "nav.leaves": "Leave", "nav.attendance": "Attendance",
     "nav.missions": "Missions", "nav.search": "Search", "nav.cards": "Cards",
-    "nav.validation": "Validation", "nav.accounts": "Accounts", "nav.stats": "Statistics", "nav.dossiers": "Files", "nav.dossierPerso": "Personnel files", "nav.decrets": "Decrees",
+    "nav.validation": "Validation", "nav.accounts": "Accounts", "nav.stats": "Statistics", "nav.dossiers": "Files", "nav.dossierPerso": "Personnel files", "nav.decrets": "Decrees", "nav.help": "Help",
+    "help.title": "User guide",
     "login.id": "Username", "login.pwd": "Password", "login.btn": "Sign in",
     "login.sub": "Staff management",
     "side.files": "records on file", "side.logout": "Sign out",
@@ -1611,7 +1614,8 @@ const L10N = {
     "nav.employees": "Персонал", "nav.providers": "Подрядчики",
     "nav.visitors": "Посетители", "nav.leaves": "Отпуска", "nav.attendance": "Посещаемость",
     "nav.missions": "Командировки", "nav.search": "Поиск", "nav.cards": "Карты",
-    "nav.validation": "Утверждение", "nav.accounts": "Учётные записи", "nav.stats": "Статистика", "nav.dossiers": "Досье", "nav.dossierPerso": "Личные дела", "nav.decrets": "Указы",
+    "nav.validation": "Утверждение", "nav.accounts": "Учётные записи", "nav.stats": "Статистика", "nav.dossiers": "Досье", "nav.dossierPerso": "Личные дела", "nav.decrets": "Указы", "nav.help": "Справка",
+    "help.title": "Руководство пользователя",
     "login.id": "Логин", "login.pwd": "Пароль", "login.btn": "Войти",
     "login.sub": "Управление персоналом",
     "side.files": "дел в реестре", "side.logout": "Выйти",
@@ -3558,6 +3562,7 @@ ${bande}
     { id: "search", label: t("nav.search"), icon: Search },
     { id: "cards", label: t("nav.cards"), icon: CreditCard },
     { id: "stats", label: t("nav.stats"), icon: BarChart3 },
+    { id: "help", label: t("nav.help"), icon: CircleHelp },
   ];
   if (isAdmin) {
     NAV.push({ id: "validation", label: t("nav.validation"), icon: BadgeCheck });
@@ -5567,6 +5572,9 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
             </>
           );
         })()}
+
+        {/* ===== AIDE ===== */}
+        {view === "help" && <GuideUtilisateur title={t("help.title")} />}
 
         {/* ===== COMPTES (admin) ===== */}
         {view === "accounts" && isAdmin && (
