@@ -177,6 +177,25 @@ button:focus-visible {
   border-bottom: none !important;
 }
 
+.gp-verify-panel {
+  scroll-margin-top: 12px;
+}
+
+@media (max-width: 768px) {
+  .gp-verify-form {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .gp-verify-form > div,
+  .gp-verify-form > button {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    width: 100%;
+  }
+}
+
 table {
   border-collapse: collapse;
 }

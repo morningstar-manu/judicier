@@ -1444,7 +1444,7 @@ const renderCardRecto = (e, armImg, photoImg, secret, kind = "PR") => {
 
   // QR d'authentification
   try {
-    const qr = qrMatrix(qrPayload(e, secret, kind));
+    const qr = qrMatrix(qrCardScanText(e, secret, kind));
     const box = 188, pad = 13, qx = CANVAS_W - 36 - 196 + (196 - box) / 2, qy = 190;
     ctx.fillStyle = "#FFFFFF"; rr(ctx, qx, qy, box, box, 12); ctx.fill();
     if (T.clair) { ctx.strokeStyle = "#A8B4BE"; ctx.lineWidth = 2; rr(ctx, qx, qy, box, box, 12); ctx.stroke(); }
@@ -1490,7 +1490,7 @@ const renderCardVerso = (e, dateEmission, kind = "PR", armImg = null) => {
   ctx.fillText(ORG.nom, 42, 68);
   ctx.fillStyle = "#3C4A58"; ctx.font = "23px Arial";
   let y = wrapText(ctx, "Cette carte est strictement personnelle. Elle doit être présentée à toute réquisition et restituée à la fin des fonctions de son titulaire.", 42, 112, CANVAS_W - 84, 33);
-  y = wrapText(ctx, "En cas de perte ou de vol, prière de la signaler et de la retourner à la " + ORG.nom + ", Bangui. L'authenticité de la carte se vérifie en scannant le QR code au recto, via l'application GestiPers (onglet Cartes).", 42, y + 10, CANVAS_W - 84, 33);
+  y = wrapText(ctx, "En cas de perte ou de vol, prière de la signaler et de la retourner à la " + ORG.nom + ", Bangui. Scannez le QR code au recto avec l'appareil photo : la vérification s'ouvre dans GestiPers (connexion requise).", 42, y + 10, CANVAS_W - 84, 33);
 
   ctx.fillStyle = "#7A8794"; ctx.font = "21px Arial";
   if (e.pieceId) {
@@ -1686,6 +1686,89 @@ const qrPayload = (e, secret, kind = "PR") => {
     String(cfg.ligne2(e)).slice(0, 30), fmtCourt(valCarte(e)), authCode(e, secret, kind)].join("|");
 };
 
+const APP_ORIGIN = (import.meta.env.VITE_APP_URL || "https://www.gestipers.org").replace(/\/$/, "");
+
+const qrScanUrl = (payload) => `${APP_ORIGIN}/?v=${encodeURIComponent(payload)}`;
+
+const qrCardScanText = (e, secret, kind = "PR") => {
+  try { return qrScanUrl(qrPayload(e, secret, kind)); }
+  catch { return qrPayload(e, secret, kind); }
+};
+
+const PENDING_VERIFY_KEY = "ghr:pending-verify";
+const readPendingVerify = () => {
+  try { return sessionStorage.getItem(PENDING_VERIFY_KEY) || ""; } catch { return ""; }
+};
+const savePendingVerify = (raw) => {
+  try { if (raw) sessionStorage.setItem(PENDING_VERIFY_KEY, raw); } catch { /* ignore */ }
+};
+const clearPendingVerify = () => {
+  try { sessionStorage.removeItem(PENDING_VERIFY_KEY); } catch { /* ignore */ }
+};
+
+const extractVerifyFields = (rawInput, codeFallback = "") => {
+  let raw = String(rawInput || "").trim();
+  if (!raw) return { mat: "", code: String(codeFallback || "").trim().toUpperCase(), raw: "" };
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      const u = new URL(raw);
+      const q = u.searchParams.get("v") || u.searchParams.get("verify");
+      if (q) raw = decodeURIComponent(q);
+    }
+  } catch { /* ignore */ }
+  if (/%7C/i.test(raw)) {
+    try { raw = decodeURIComponent(raw); } catch { /* ignore */ }
+  }
+  let mat = raw.toUpperCase();
+  let code = String(codeFallback || "").trim().toUpperCase();
+  if (raw.includes("|")) {
+    const p = raw.split("|");
+    if (p[0] === "GESTIPERS") {
+      mat = (p[1] || "").toUpperCase();
+      code = (p[5] || "").trim().toUpperCase() || code;
+    }
+  }
+  return { mat, code, raw };
+};
+
+const computeVerifResult = (matInput, codeInput, ctx) => {
+  const { mat, code } = extractVerifyFields(matInput, codeInput);
+  const { secret, employees, prestataires, visiteurs, missions, leaves, decrets } = ctx;
+  if (!mat) return { ok: false, msg: "Scan ou saisie invalide." };
+  let kind = mat.split("-")[0];
+  if (kind === "OM") {
+    const matNormOM = mat.replace(/[\s.]/g, "");
+    const m = missions.find((x) => "OM-" + String(x.id).toUpperCase() === matNormOM);
+    if (!m) return { ok: false, msg: "Ordre de mission inconnu dans le registre." };
+    if (missionAuthCode(m, secret) !== code) return { ok: false, msg: "Code d'authentification invalide — cet ordre de mission n'a pas été émis par cette installation ou a été falsifié." };
+    if (m.validation === "Refusée") return { ok: false, msg: "Cet ordre de mission a été REFUSÉ — document non valable." };
+    return { ok: true, om: m, emp: employees.find((x) => x.id === m.employeeId) || null };
+  }
+  if (kind === "DC") {
+    const matNormDC = mat.replace(/[\s.]/g, "");
+    const d = decrets.find((x) => "DC-" + String(x.id).toUpperCase() === matNormDC);
+    if (!d) return { ok: false, msg: "Décret inconnu dans le registre." };
+    if (decretAuthCode(d, secret) !== code) return { ok: false, msg: "Code d'authentification invalide — ce décret n'a pas été émis par cette installation ou a été falsifié." };
+    return { ok: true, dc: d };
+  }
+  if (kind === "CG") {
+    const matNormCG = mat.replace(/[\s.]/g, "");
+    const l = leaves.find((x) => "CG-" + String(x.id).toUpperCase() === matNormCG);
+    if (!l) return { ok: false, msg: "Décision de congé inconnue dans le registre." };
+    if (congeAuthCode(l, secret) !== code) return { ok: false, msg: "Code d'authentification invalide — cette décision n'a pas été émise par cette installation ou a été falsifiée." };
+    if (l.statut !== "Approuvé") return { ok: false, msg: "Cette décision de congé n'est pas approuvée — document non valable." };
+    return { ok: true, cg: l, emp: employees.find((x) => x.id === l.employeeId) || null };
+  }
+  const pools = { PR: employees, PS: prestataires, VI: visiteurs };
+  let pool = pools[kind];
+  if (!pool) { kind = "PR"; pool = employees; }
+  const matNorm = mat.replace(/[\s.]/g, "");
+  const e = pool.find((x) => matricule(x, kind).replace(/[\s.]/g, "") === matNorm);
+  if (!e) return { ok: false, msg: "Matricule inconnu dans le registre." };
+  if (authCode(e, secret, kind) !== code) return { ok: false, msg: "Code d'authentification invalide — cette carte n'a pas été émise par cette installation ou a été falsifiée." };
+  return { ok: true, emp: e, kind, expiree: carteExpiree(e) };
+};
+
 
 const QRSvg = ({ text, size = 64 }) => {
   const qr = useMemo(() => { try { return qrMatrix(text); } catch (e) { return null; } }, [text]);
@@ -1727,7 +1810,7 @@ const CarteVersoPro = ({ emp, kind = "PR", w = 340 }) => {
         </p>
         <p style={{ fontSize: w * 0.0245, color: "#3C4A58", margin: `${w * 0.008}px 0 0`, lineHeight: 1.45 }}>
           En cas de perte ou de vol, prière de la signaler et de la retourner à la {ORG.nom}, Bangui.
-          L'authenticité se vérifie en scannant le QR au recto.
+          L'authenticité se vérifie en scannant le QR au recto (ouvre GestiPers sur mobile).
         </p>
         <div style={{ marginTop: "auto", display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10 }}>
           <div style={{ fontSize: w * 0.023, color: "#5E6E7B", lineHeight: 1.5 }}>
@@ -1794,7 +1877,7 @@ const CartePro = ({ emp, secret = "", kind = "PR", w = 340 }) => {
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: w * 0.008, flexShrink: 0 }}>
           <div style={{ background: "#fff", borderRadius: 6, padding: w * 0.011, lineHeight: 0, border: T.clair ? `1px solid ${C.line}` : "none" }} title="QR code d'authentification">
-            <QRSvg text={qrPayload(emp, secret, kind)} size={Math.round(w * 0.165)} />
+            <QRSvg text={qrCardScanText(emp, secret, kind)} size={Math.round(w * 0.165)} />
           </div>
           <div style={{ fontSize: w * 0.021, letterSpacing: 1.5, fontFamily: "ui-monospace, 'Courier New', monospace", fontWeight: 700, color: T.muted }}>
             {authCode(emp, secret, kind)}
@@ -1920,6 +2003,16 @@ export default function GestionPersonnel() {
       }
     })();
   }, [applySessionFromUsers]);
+
+  useEffect(() => {
+    if (!authHydrated) return;
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("v") || params.get("verify");
+    if (fromUrl) {
+      savePendingVerify(decodeURIComponent(fromUrl));
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [authHydrated]);
 
   useEffect(() => {
     if (!currentUser) { setReadNotifs([]); return; }
@@ -2353,7 +2446,7 @@ ${leaves.length ? `<table class="donnees"><tr><th>Employé</th><th>Type</th><th>
               <div style="font-size:5pt;color:${T.muted};margin-top:1mm;letter-spacing:0.3mm">Matricule : ${matricule(e, kind)}</div>
             </div>
             <div style="display:flex;flex-direction:column;align-items:center;gap:0.5mm;flex-shrink:0">
-              <div style="background:#fff;border-radius:1.2mm;padding:0.8mm;line-height:0${T.clair ? ";border:0.2mm solid #A8B4BE" : ""}">${qrSvgString(qrPayload(e, secret, kind), 13.5)}</div>
+              <div style="background:#fff;border-radius:1.2mm;padding:0.8mm;line-height:0${T.clair ? ";border:0.2mm solid #A8B4BE" : ""}">${qrSvgString(qrCardScanText(e, secret, kind), 13.5)}</div>
               <div style="font-size:4.6pt;letter-spacing:0.35mm;font-family:'Courier New',monospace;font-weight:700;color:${T.muted}">${authCode(e, secret, kind)}</div>
             </div>
           </div>
@@ -2372,8 +2465,7 @@ ${leaves.length ? `<table class="donnees"><tr><th>Employé</th><th>Type</th><th>
             </p>
             <p style="font-size:5.4pt;color:#3C4A58;margin:1mm 0 0;line-height:1.5">
               En cas de perte ou de vol, prière de la signaler et de la retourner à la ${ORG.nom}, Bangui.
-              L'authenticité de cette carte se vérifie en scannant le QR code au recto : le code obtenu
-              doit être confirmé dans le registre du personnel (application GestiPers, onglet Cartes).
+              L'authenticité se vérifie en scannant le QR au recto : ouverture de GestiPers sur mobile (connexion requise).
             </p>
             <div style="margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end">
               <div style="font-size:5pt;color:#7A8794">
@@ -2630,8 +2722,8 @@ ${photoB64 ? '<td valign="top" width="125" align="right"><img src="photo.jpg" wi
 <p class="just">Les autorités civiles et militaires sont priées de faciliter à l'intéressé(e) l'accomplissement de sa mission et de lui apporter, en cas de besoin, aide et assistance.</p>
 <table width="100%" style="margin-top:26px;border-collapse:collapse"><tr>
 <td valign="bottom" style="width:42%">
-${qrTableHTML(omPayload, 3)}
-<p style="font-size:8pt;color:#555;margin:6px 0 0;line-height:1.4">Authentification : <b>OM-${String(m.id).toUpperCase()}</b> · Code <b>${omCode}</b><br>Scannez le QR ou vérifiez ce document dans GestiPers (onglet Cartes).</p>
+${qrTableHTML(qrScanUrl(omPayload), 3)}
+<p style="font-size:8pt;color:#555;margin:6px 0 0;line-height:1.4">Authentification : <b>OM-${String(m.id).toUpperCase()}</b> · Code <b>${omCode}</b><br>Scannez le QR avec l'appareil photo : vérification automatique dans GestiPers (connexion requise).</p>
 </td>
 <td valign="top" style="text-align:right">
 <p class="lieu">Fait à Bangui, le ${dateExport}</p>
@@ -2702,8 +2794,8 @@ ${ligne("Service / Direction", e?.departement)}
 <p class="just">L'intéressé(e) devra reprendre son service à l'expiration de la période ci-dessus. La présente décision sera enregistrée et communiquée partout où besoin sera.</p>
 <table width="100%" style="margin-top:26px;border-collapse:collapse"><tr>
 <td valign="bottom" style="width:42%">
-${qrTableHTML(cgPayload, 3)}
-<p style="font-size:8pt;color:#555;margin:6px 0 0;line-height:1.4">Authentification : <b>CG-${String(l.id).toUpperCase()}</b> · Code <b>${cgCode}</b><br>Scannez le QR ou vérifiez ce document dans GestiPers (onglet Cartes).</p>
+${qrTableHTML(qrScanUrl(cgPayload), 3)}
+<p style="font-size:8pt;color:#555;margin:6px 0 0;line-height:1.4">Authentification : <b>CG-${String(l.id).toUpperCase()}</b> · Code <b>${cgCode}</b><br>Scannez le QR avec l'appareil photo : vérification automatique dans GestiPers (connexion requise).</p>
 </td>
 <td valign="top" style="text-align:right">
 <p class="lieu">Fait à Bangui, le ${dateExport}</p>
@@ -2954,8 +3046,8 @@ ${armB64 ? '<div style="text-align:center;margin-top:10px"><img src="armoiries.p
 ${corps || '<p class="just">…</p>'}
 <table width="100%" style="margin-top:26px;border-collapse:collapse"><tr>
 <td valign="bottom" style="width:42%">
-${qrTableHTML(dcPayload, 3)}
-<p style="font-size:8pt;color:#555;margin:6px 0 0;line-height:1.4">Authentification : <b>DC-${String(dc.id).toUpperCase()}</b> · Code <b>${dcCode}</b><br>Scannez le QR ou vérifiez ce document dans GestiPers (onglet Cartes).</p>
+${qrTableHTML(qrScanUrl(dcPayload), 3)}
+<p style="font-size:8pt;color:#555;margin:6px 0 0;line-height:1.4">Authentification : <b>DC-${String(dc.id).toUpperCase()}</b> · Code <b>${dcCode}</b><br>Scannez le QR avec l'appareil photo : vérification automatique dans GestiPers (connexion requise).</p>
 </td>
 <td valign="top" style="text-align:right">
 <p class="lieu">Fait à Bangui, le ${fmtDate(dc.dateDecret)}</p>
@@ -3003,48 +3095,37 @@ ${bande}
   };
 
   /* Vérification de l'authenticité d'une carte */
+  const applyVerifyFromRaw = useCallback((raw) => {
+    if (!currentUser || !raw) return;
+    const { mat, code } = extractVerifyFields(raw);
+    const result = computeVerifResult(raw, code, {
+      secret, employees, prestataires, visiteurs, missions, leaves, decrets,
+    });
+    setVerif({ matricule: mat, code, result });
+    setView("cards");
+    requestAnimationFrame(() => {
+      document.getElementById("gp-verify-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [currentUser, secret, employees, prestataires, visiteurs, missions, leaves, decrets]);
+
+  useEffect(() => {
+    if (!authHydrated || !data || !currentUser || !secret) return;
+    const pending = readPendingVerify();
+    if (!pending) return;
+    clearPendingVerify();
+    applyVerifyFromRaw(pending);
+  }, [authHydrated, data, currentUser, secret, applyVerifyFromRaw]);
+
   const lancerVerif = () => {
-    let mat = verif.matricule.trim().toUpperCase();
-    let code = verif.code.trim().toUpperCase();
-    if (mat.includes("|")) { // contenu complet du QR collé
-      const p = mat.split("|");
-      if (p[0] === "GESTIPERS") { mat = (p[1] || "").toUpperCase(); code = (p[5] || code).trim().toUpperCase(); }
-    }
-    let kind = mat.split("-")[0];
-    if (kind === "OM") {
-      const matNormOM = mat.replace(/[\s.]/g, "");
-      const m = missions.find((x) => "OM-" + String(x.id).toUpperCase() === matNormOM);
-      if (!m) { setVerif((v) => ({ ...v, result: { ok: false, msg: "Ordre de mission inconnu dans le registre." } })); return; }
-      if (missionAuthCode(m, secret) !== code) { setVerif((v) => ({ ...v, result: { ok: false, msg: "Code d'authentification invalide — cet ordre de mission n'a pas été émis par cette installation ou a été falsifié." } })); return; }
-      if (m.validation === "Refusée") { setVerif((v) => ({ ...v, result: { ok: false, msg: "Cet ordre de mission a été REFUSÉ — document non valable." } })); return; }
-      setVerif((v) => ({ ...v, result: { ok: true, om: m, emp: empById(m.employeeId) } }));
+    if (!currentUser) {
+      if (verif.matricule.trim()) savePendingVerify(verif.matricule.trim());
       return;
     }
-    if (kind === "DC") {
-      const matNormDC = mat.replace(/[\s.]/g, "");
-      const d = decrets.find((x) => "DC-" + String(x.id).toUpperCase() === matNormDC);
-      if (!d) { setVerif((v) => ({ ...v, result: { ok: false, msg: "Décret inconnu dans le registre." } })); return; }
-      if (decretAuthCode(d, secret) !== code) { setVerif((v) => ({ ...v, result: { ok: false, msg: "Code d'authentification invalide — ce décret n'a pas été émis par cette installation ou a été falsifié." } })); return; }
-      setVerif((v) => ({ ...v, result: { ok: true, dc: d } }));
-      return;
-    }
-    if (kind === "CG") {
-      const matNormCG = mat.replace(/[\s.]/g, "");
-      const l = leaves.find((x) => "CG-" + String(x.id).toUpperCase() === matNormCG);
-      if (!l) { setVerif((v) => ({ ...v, result: { ok: false, msg: "Décision de congé inconnue dans le registre." } })); return; }
-      if (congeAuthCode(l, secret) !== code) { setVerif((v) => ({ ...v, result: { ok: false, msg: "Code d'authentification invalide — cette décision n'a pas été émise par cette installation ou a été falsifiée." } })); return; }
-      if (l.statut !== "Approuvé") { setVerif((v) => ({ ...v, result: { ok: false, msg: "Cette décision de congé n'est pas approuvée — document non valable." } })); return; }
-      setVerif((v) => ({ ...v, result: { ok: true, cg: l, emp: empById(l.employeeId) } }));
-      return;
-    }
-    const pools = { PR: employees, PS: prestataires, VI: visiteurs };
-    let pool = pools[kind];
-    if (!pool) { kind = "PR"; pool = employees; } // matricule officiel sans préfixe → registre des employés
-    const matNorm = mat.replace(/[\s.]/g, "");
-    const e = pool.find((x) => matricule(x, kind).replace(/[\s.]/g, "") === matNorm);
-    if (!e) { setVerif((v) => ({ ...v, result: { ok: false, msg: "Matricule inconnu dans le registre." } })); return; }
-    if (authCode(e, secret, kind) !== code) { setVerif((v) => ({ ...v, result: { ok: false, msg: "Code d'authentification invalide — cette carte n'a pas été émise par cette installation ou a été falsifiée." } })); return; }
-    setVerif((v) => ({ ...v, result: { ok: true, emp: e, kind, expiree: carteExpiree(e) } }));
+    const { mat, code } = extractVerifyFields(verif.matricule, verif.code);
+    const result = computeVerifResult(verif.matricule, verif.code, {
+      secret, employees, prestataires, visiteurs, missions, leaves, decrets,
+    });
+    setVerif({ matricule: mat, code, result });
   };
 
   /* Actions comptes et connexion */
@@ -3059,7 +3140,7 @@ ${bande}
       setReadNotifs(readNotifIds(u.id));
       save(withLog(data, "Connexion", u.identifiant, u.identifiant));
       setLoginForm({ identifiant: "", motDePasse: "", error: "" });
-      setView("dashboard");
+      setView(readPendingVerify() ? "cards" : "dashboard");
     } else {
       setLoginForm((f) => ({ ...f, error: "Identifiant ou mot de passe incorrect." }));
     }
@@ -3211,6 +3292,11 @@ ${bande}
                 onKeyDown={(e) => e.key === "Enter" && tryLogin()} />
             </Field>
             {loginForm.error && <div style={{ fontSize: 12.5, color: C.red }}>{loginForm.error}</div>}
+            {readPendingVerify() && (
+              <div style={{ fontSize: 12.5, color: C.teal, background: C.tealSoft, borderRadius: 8, padding: "10px 12px", lineHeight: 1.45 }}>
+                Scan de carte détecté — connectez-vous pour lancer la vérification automatique.
+              </div>
+            )}
             <button onClick={tryLogin}
               style={{ background: C.teal, color: "#fff", border: "none", borderRadius: 9, padding: "11px 16px", fontSize: 14.5, fontWeight: 600, cursor: "pointer", display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
               <Lock size={15} /> {t("login.btn")}
@@ -4102,7 +4188,89 @@ ${bande}
           const tousAffichesSel = displayed.length > 0 && selection.length === displayed.length;
           const collKey = { PR: "employees", PS: "prestataires", VI: "visiteurs" }[cardKind];
           return (
-            <>
+            <div className="gp-cards-layout">
+              <div id="gp-verify-panel" className="gp-verify-panel" style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 13, padding: 18, marginBottom: 20 }}>
+                <h2 style={{ margin: "0 0 4px", fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
+                  <Shield size={16} color={C.teal} /> Vérifier une carte (scan QR)
+                </h2>
+                <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 12px" }}>
+                  Scannez le QR avec l'appareil photo : GestiPers s'ouvre et vérifie automatiquement (connexion obligatoire).
+                </p>
+                <div className="gp-verify-form" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+                  <div style={{ flex: 2, minWidth: 200 }}>
+                    <Field label="Matricule ou lien scanné">
+                      <input style={inputStyle} placeholder="PR-XXXXXXX" value={verif.matricule}
+                        onChange={(ev) => setVerif({ ...verif, matricule: ev.target.value, result: null })}
+                        onKeyDown={(ev) => ev.key === "Enter" && lancerVerif()} />
+                    </Field>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 140 }}>
+                    <Field label="Code (saisie manuelle)">
+                      <input style={inputStyle} placeholder="Ex : 4F2A91C7" value={verif.code}
+                        onChange={(ev) => setVerif({ ...verif, code: ev.target.value, result: null })}
+                        onKeyDown={(ev) => ev.key === "Enter" && lancerVerif()} />
+                    </Field>
+                  </div>
+                  <button onClick={lancerVerif} disabled={!verif.matricule.trim()}
+                    style={{ background: verif.matricule.trim() ? C.teal : C.muted, color: "#fff", border: "none", borderRadius: 9, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: verif.matricule.trim() ? "pointer" : "not-allowed", flex: "1 1 100%", maxWidth: 360 }}>
+                    Vérifier
+                  </button>
+                </div>
+                {verif.result && (
+                  verif.result.ok && verif.result.dc ? (
+                    <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, background: C.greenSoft, border: `1px solid ${C.green}44`, borderRadius: 10, padding: "11px 14px", flexWrap: "wrap" }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: C.tealSoft, color: C.teal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <ScrollText size={19} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 180 }}>
+                        <div style={{ fontWeight: 700, color: C.green, fontSize: 14 }}>Décret authentique ✓</div>
+                        <div style={{ fontSize: 13, color: C.inkSoft }}>Décret n° {verif.result.dc.numero} du {fmtDate(verif.result.dc.dateDecret)}</div>
+                        <div style={{ fontSize: 12, color: C.muted }}>portant {verif.result.dc.objet}</div>
+                      </div>
+                    </div>
+                  ) : verif.result.ok && verif.result.cg ? (
+                    <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, background: C.greenSoft, border: `1px solid ${C.green}44`, borderRadius: 10, padding: "11px 14px", flexWrap: "wrap" }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: C.tealSoft, color: C.teal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <CalendarDays size={19} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 180 }}>
+                        <div style={{ fontWeight: 700, color: C.green, fontSize: 14 }}>Décision de congé authentique ✓</div>
+                        <div style={{ fontSize: 13, color: C.inkSoft }}>
+                          {verif.result.emp ? `${verif.result.emp.prenom} ${verif.result.emp.nom} — ` : ""}{verif.result.cg.type}
+                        </div>
+                        <div style={{ fontSize: 12, color: C.muted }}>Du {fmtDate(verif.result.cg.debut)} au {fmtDate(verif.result.cg.fin)}</div>
+                      </div>
+                    </div>
+                  ) : verif.result.ok && verif.result.om ? (
+                    <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, background: C.greenSoft, border: `1px solid ${C.green}44`, borderRadius: 10, padding: "11px 14px", flexWrap: "wrap" }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: C.tealSoft, color: C.teal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Plane size={19} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 180 }}>
+                        <div style={{ fontWeight: 700, color: C.green, fontSize: 14 }}>Ordre de mission authentique ✓</div>
+                        <div style={{ fontSize: 13, color: C.inkSoft }}>
+                          {verif.result.emp ? `${verif.result.emp.prenom} ${verif.result.emp.nom} — ` : ""}{verif.result.om.objet}
+                        </div>
+                      </div>
+                    </div>
+                  ) : verif.result.ok ? (
+                    <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, background: C.greenSoft, border: `1px solid ${C.green}44`, borderRadius: 10, padding: "11px 14px", flexWrap: "wrap" }}>
+                      <Avatar emp={verif.result.emp} size={40} />
+                      <div style={{ flex: 1, minWidth: 180 }}>
+                        <div style={{ fontWeight: 700, color: C.green, fontSize: 14 }}>Carte authentique ✓ — {(CARD_KINDS[verif.result.kind] || CARD_KINDS.PR).label}</div>
+                        <div style={{ fontSize: 13, color: C.inkSoft }}>{verif.result.emp.prenom} {verif.result.emp.nom}</div>
+                        <div style={{ fontSize: 12, color: verif.result.expiree ? C.red : C.muted }}>{verif.result.expiree ? "Carte EXPIRÉE" : `Valable jusqu'au ${fmtCourt(valCarte(verif.result.emp))}`}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, background: C.redSoft, border: `1px solid ${C.red}44`, borderRadius: 10, padding: "11px 14px" }}>
+                      <XCircle size={18} color={C.red} />
+                      <div style={{ fontSize: 13.5, color: C.red, fontWeight: 600 }}>{verif.result.msg}</div>
+                    </div>
+                  )
+                )}
+              </div>
+
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 12 }}>
                 <h1 style={{ margin: 0, fontSize: 22 }}>{t("cards.title")}</h1>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -4202,119 +4370,6 @@ ${bande}
                 </div>
               )}
 
-              {/* Vérification d'authenticité */}
-              <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 13, padding: 18, marginBottom: 20 }}>
-                <h2 style={{ margin: "0 0 4px", fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
-                  <Shield size={16} color={C.teal} /> Vérifier l'authenticité d'une carte
-                </h2>
-                <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 12px" }}>
-                  Saisissez le matricule et le code affichés lors du scan du QR — ou collez directement tout le contenu du QR dans le champ matricule.
-                </p>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-                  <div style={{ flex: 2, minWidth: 200 }}>
-                    <Field label="Matricule (ou contenu du QR)">
-                      <input style={inputStyle} placeholder="PR-XXXXXXX" value={verif.matricule}
-                        onChange={(ev) => setVerif({ ...verif, matricule: ev.target.value, result: null })}
-                        onKeyDown={(ev) => ev.key === "Enter" && lancerVerif()} />
-                    </Field>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 140 }}>
-                    <Field label="Code d'authentification">
-                      <input style={inputStyle} placeholder="Ex : 4F2A91C7" value={verif.code}
-                        onChange={(ev) => setVerif({ ...verif, code: ev.target.value, result: null })}
-                        onKeyDown={(ev) => ev.key === "Enter" && lancerVerif()} />
-                    </Field>
-                  </div>
-                  <button onClick={lancerVerif} disabled={!verif.matricule.trim()}
-                    style={{ background: verif.matricule.trim() ? C.teal : C.muted, color: "#fff", border: "none", borderRadius: 9, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: verif.matricule.trim() ? "pointer" : "not-allowed" }}>
-                    Vérifier
-                  </button>
-                </div>
-                {verif.result && (
-                  verif.result.ok && verif.result.dc ? (
-                    <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, background: C.greenSoft, border: `1px solid ${C.green}44`, borderRadius: 10, padding: "11px 14px", flexWrap: "wrap" }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 10, background: C.tealSoft, color: C.teal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <ScrollText size={19} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 180 }}>
-                        <div style={{ fontWeight: 700, color: C.green, fontSize: 14 }}>Décret authentique ✓</div>
-                        <div style={{ fontSize: 13, color: C.inkSoft }}>Décret n° {verif.result.dc.numero} du {fmtDate(verif.result.dc.dateDecret)}</div>
-                        <div style={{ fontSize: 12, color: C.muted }}>portant {verif.result.dc.objet}</div>
-                      </div>
-                    </div>
-                  ) : verif.result.ok && verif.result.cg ? (
-                    <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, background: C.greenSoft, border: `1px solid ${C.green}44`, borderRadius: 10, padding: "11px 14px", flexWrap: "wrap" }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 10, background: C.tealSoft, color: C.teal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <CalendarDays size={19} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 180 }}>
-                        <div style={{ fontWeight: 700, color: C.green, fontSize: 14 }}>Décision de congé authentique ✓</div>
-                        <div style={{ fontSize: 13, color: C.inkSoft }}>
-                          {verif.result.emp ? `${verif.result.emp.prenom} ${verif.result.emp.nom} — ` : ""}{verif.result.cg.type}
-                        </div>
-                        <div style={{ fontSize: 12, color: C.muted }}>
-                          Du {fmtDate(verif.result.cg.debut)} au {fmtDate(verif.result.cg.fin)}
-                        </div>
-                      </div>
-                      {verif.result.cg.fin < today()
-                        ? <Badge bg={C.amberSoft} color="#9A6B14">Congé terminé</Badge>
-                        : verif.result.cg.debut > today()
-                          ? <Badge bg="#fff" color={C.green}>Congé à venir</Badge>
-                          : <Badge bg={C.tealSoft} color={C.teal}>Congé en cours</Badge>}
-                    </div>
-                  ) : verif.result.ok && verif.result.om ? (
-                    <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, background: C.greenSoft, border: `1px solid ${C.green}44`, borderRadius: 10, padding: "11px 14px", flexWrap: "wrap" }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 10, background: C.tealSoft, color: C.teal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <Plane size={19} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 180 }}>
-                        <div style={{ fontWeight: 700, color: C.green, fontSize: 14 }}>Ordre de mission authentique ✓</div>
-                        <div style={{ fontSize: 13, color: C.inkSoft }}>
-                          {verif.result.emp ? `${verif.result.emp.prenom} ${verif.result.emp.nom} — ` : ""}{verif.result.om.objet}{verif.result.om.destination ? ` · ${verif.result.om.destination}` : ""}
-                        </div>
-                        <div style={{ fontSize: 12, color: C.muted }}>
-                          Du {fmtDate(verif.result.om.debut)} au {fmtDate(verif.result.om.fin)}
-                        </div>
-                      </div>
-                      {verif.result.om.validation === "En attente" && <Badge bg={C.redSoft} color={C.red}>Non encore validée !</Badge>}
-                      {statutMission(verif.result.om) === "En cours" && verif.result.om.validation === "Validée" && <Badge bg={C.tealSoft} color={C.teal}>Mission en cours</Badge>}
-                      {statutMission(verif.result.om) === "À venir" && <Badge bg="#fff" color={C.green}>Mission à venir</Badge>}
-                      {statutMission(verif.result.om) === "Terminée" && <Badge bg={C.amberSoft} color="#9A6B14">Mission terminée</Badge>}
-                    </div>
-                  ) : verif.result.ok ? (
-                    <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, background: C.greenSoft, border: `1px solid ${C.green}44`, borderRadius: 10, padding: "11px 14px", flexWrap: "wrap" }}>
-                      <Avatar emp={verif.result.emp} size={40} />
-                      <div style={{ flex: 1, minWidth: 160 }}>
-                        <div style={{ fontWeight: 700, color: C.green, fontSize: 14 }}>
-                          Carte authentique ✓ — {(CARD_KINDS[verif.result.kind] || CARD_KINDS.PR).label}
-                        </div>
-                        <div style={{ fontSize: 13, color: C.inkSoft }}>
-                          {verif.result.emp.prenom} {verif.result.emp.nom} — {(CARD_KINDS[verif.result.kind] || CARD_KINDS.PR).ligne2(verif.result.emp)}, {(CARD_KINDS[verif.result.kind] || CARD_KINDS.PR).chip(verif.result.emp)}
-                        </div>
-                        <div style={{ fontSize: 12, color: verif.result.expiree ? C.red : C.muted, fontWeight: verif.result.expiree ? 700 : 400 }}>
-                          {verif.result.expiree ? "Carte EXPIRÉE le " : "Valable jusqu'au "}{fmtCourt(valCarte(verif.result.emp))}
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {verif.result.kind === "VI" && verif.result.emp.categorie && verif.result.emp.categorie !== "Standard" && (
-                          <Badge bg={(VIS_CAT_COLORS[verif.result.emp.categorie] || "#5B6BB0") + "1E"} color={VIS_CAT_COLORS[verif.result.emp.categorie] || "#5B6BB0"}>
-                            {verif.result.emp.categorie}
-                          </Badge>
-                        )}
-                        {verif.result.expiree && <Badge bg={C.amberSoft} color="#9A6B14">{verif.result.kind === "VI" ? "Badge expiré" : "À renouveler"}</Badge>}
-                        {verif.result.kind !== "VI" && (verif.result.emp.statut === "Actif"
-                          ? <Badge bg="#fff" color={C.green}>{(CARD_KINDS[verif.result.kind] || CARD_KINDS.PR).label} actif</Badge>
-                          : <Badge bg={C.redSoft} color={C.red}>Attention : {(CARD_KINDS[verif.result.kind] || CARD_KINDS.PR).label.toLowerCase()} inactif</Badge>)}
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, background: C.redSoft, border: `1px solid ${C.red}44`, borderRadius: 10, padding: "11px 14px" }}>
-                      <XCircle size={18} color={C.red} />
-                      <div style={{ fontSize: 13.5, color: C.red, fontWeight: 600 }}>{verif.result.msg}</div>
-                    </div>
-                  )
-                )}
-              </div>
               {displayed.length === 0 && (
                 <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 13, padding: 30, textAlign: "center", color: C.muted }}>
                   {q ? "Aucun résultat pour cette recherche."
@@ -4345,7 +4400,7 @@ ${bande}
                   );
                 })}
               </div>
-            </>
+            </div>
           );
         })()}
 
