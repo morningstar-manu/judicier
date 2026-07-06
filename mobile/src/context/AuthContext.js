@@ -18,9 +18,14 @@ export function AuthProvider({ children }) {
           const { user: u } = await api.me();
           setUser(u);
         }
-      } catch {
-        await AsyncStorage.removeItem(STORAGE_KEY);
-        setToken(null);
+      } catch (err) {
+        // Ne détruire la session que si le serveur a explicitement rejeté le
+        // token (401/403) — une simple coupure réseau ne doit pas déconnecter
+        // l'agent sur le terrain.
+        if (err?.status === 401 || err?.status === 403) {
+          await AsyncStorage.removeItem(STORAGE_KEY);
+          setToken(null);
+        }
       } finally {
         setLoading(false);
       }

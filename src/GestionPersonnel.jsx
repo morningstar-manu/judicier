@@ -23,7 +23,7 @@ import {
   qrPayload as qrPayloadShared,
   qrScanUrl as qrScanUrlShared,
 } from "@gestipers/shared/verify.mjs";
-import { hashPassword, verifyPassword } from "@gestipers/shared/password.mjs";
+import { hashPassword, maybeRehash } from "@gestipers/shared/password.mjs";
 
 /* ---------- Palette ---------- */
 const C = {
@@ -1691,11 +1691,7 @@ const qrPayload = (e, secret, kind = "PR") => {
   return qrPayloadShared(e, secret, kind, cfg.ligne2(e));
 };
 
-const APP_ORIGIN = (
-  typeof window !== "undefined" && window.location?.origin
-    ? window.location.origin
-    : (import.meta.env.VITE_APP_URL || "https://www.gestipers.org")
-).replace(/\/$/, "");
+const APP_ORIGIN = (import.meta.env.VITE_APP_URL || "https://www.gestipers.org").replace(/\/$/, "");
 
 const qrScanUrl = (mat, code) => qrScanUrlShared(APP_ORIGIN, mat, code);
 
@@ -3190,15 +3186,21 @@ ${bande}
     const u = users.find(
       (x) => x.identifiant.toLowerCase() === loginForm.identifiant.trim().toLowerCase()
     );
-    if (!u || !(await verifyPassword(loginForm.motDePasse, u.motDePasse))) {
+    const check = u ? await maybeRehash(loginForm.motDePasse, u.motDePasse) : { ok: false };
+    if (!u || !check.ok) {
       setLoginForm((f) => ({ ...f, error: "Identifiant ou mot de passe incorrect." }));
       return;
     }
-    setCurrentUser(u);
-    saveSession(u);
+    const rehashed = check.hash !== u.motDePasse;
+    const loggedUser = rehashed ? { ...u, motDePasse: check.hash } : u;
+    const nextData = rehashed
+      ? { ...data, users: users.map((x) => (x.id === u.id ? loggedUser : x)) }
+      : data;
+    setCurrentUser(loggedUser);
+    saveSession(loggedUser);
     setShowCover(false);
     setReadNotifs(readNotifIds(u.id));
-    save(withLog(data, "Connexion", u.identifiant, u.identifiant));
+    save(withLog(nextData, "Connexion", u.identifiant, u.identifiant));
     setLoginForm({ identifiant: "", motDePasse: "", error: "" });
     setView(readPendingVerify() ? "cards" : "dashboard");
   };

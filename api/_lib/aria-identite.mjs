@@ -24,15 +24,20 @@ async function ariaPost(path, body) {
   const headers = { "Content-Type": "application/json" };
   if (API_KEY) headers.Authorization = `Bearer ${API_KEY}`;
 
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      requester_id: REQUESTER,
-      legal_basis: LEGAL_BASIS,
-      ...body,
-    }),
-  });
+  let res;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        requester_id: REQUESTER,
+        legal_basis: LEGAL_BASIS,
+        ...body,
+      }),
+    });
+  } catch (err) {
+    return { available: false, ok: false, error: `Service Aria Identité injoignable: ${err.message || err}` };
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     return { available: true, ok: false, status: res.status, error: data.error || data.message || `HTTP ${res.status}` };

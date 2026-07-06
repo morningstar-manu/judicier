@@ -1,5 +1,13 @@
 import { createToken } from "./auth.mjs";
-import { loadState, saveState, setFile } from "./sync.mjs";
+import {
+  loadState,
+  setFile,
+  findUserByIdentifiant,
+  updateUserPassword,
+  insertVisiteur,
+  insertBagage,
+  appendJournal,
+} from "./sync.mjs";
 import { verifyOfficialDocument, ariaAvailable } from "./aria-identite.mjs";
 import {
   jsonResponse,
@@ -20,11 +28,6 @@ import { ocrFromDataUrl } from "./ocr.mjs";
 async function getAppState() {
   const state = await loadState();
   if (!state) throw new Error("Base non initialisée");
-  return state;
-}
-
-async function persistState(state) {
-  await saveState(state);
   return state;
 }
 
@@ -54,17 +57,25 @@ export async function handleV1Request(method, url, req, bodyText = "") {
   if (method === "OPTIONS") return optionsResponse();
 
   try {
+    let body = {};
+    if (bodyText) {
+      try {
+        body = JSON.parse(bodyText);
+      } catch {
+        return jsonResponse(400, { error: "Corps JSON invalide" });
+      }
+      if (body === null || typeof body !== "object" || Array.isArray(body)) {
+        return jsonResponse(400, { error: "Corps JSON invalide" });
+      }
+    }
+
     if (route === "auth/login" && method === "POST") {
-      const body = bodyText ? JSON.parse(bodyText) : {};
       const identifiant = String(body.identifiant || "").trim();
       const motDePasse = String(body.motDePasse || "");
       if (!identifiant || !motDePasse) {
         return jsonResponse(400, { error: "identifiant et motDePasse requis" });
       }
-      const state = await getAppState();
-      const user = (state.users || []).find(
-        (u) => u.identifiant.toLowerCase() === identifiant.toLowerCase()
-      );
+      const user = await findUserByIdentifiant(identifiant);
       if (!user) {
         return jsonResponse(401, { error: "Identifiants incorrects" });
       }
@@ -73,10 +84,7 @@ export async function handleV1Request(method, url, req, bodyText = "") {
         return jsonResponse(401, { error: "Identifiants incorrects" });
       }
       if (check.hash !== user.motDePasse) {
-        state.users = state.users.map((u) =>
-          u.id === user.id ? { ...u, motDePasse: check.hash } : u
-        );
-        await persistState(state);
+        await updateUserPassword(user.id, check.hash);
         user.motDePasse = check.hash;
       }
       const token = createToken(user);
@@ -111,7 +119,6 @@ export async function handleV1Request(method, url, req, bodyText = "") {
     const actor = auth.user;
 
     if (route === "verify/card" && method === "POST") {
-      const body = bodyText ? JSON.parse(bodyText) : {};
       const raw = body.raw || body.matricule || body.qr || "";
       const code = body.code || "";
       const state = await getAppState();
@@ -158,7 +165,6 @@ export async function handleV1Request(method, url, req, bodyText = "") {
     }
 
     if (route === "verify/id" && method === "POST") {
-      const body = bodyText ? JSON.parse(bodyText) : {};
       const state = await getAppState();
       const ctx = buildVerifContext(state);
       const internal = verifyPieceIdentite(
@@ -188,13 +194,11 @@ export async function handleV1Request(method, url, req, bodyText = "") {
     }
 
     if (route === "verify/parse-mrz" && method === "POST") {
-      const body = bodyText ? JSON.parse(bodyText) : {};
       const parsed = parseMrzFromText(body.text || body.ocrText || "");
       return jsonResponse(200, parsed);
     }
 
     if (route === "verify/scan-mrz" && method === "POST") {
-      const body = bodyText ? JSON.parse(bodyText) : {};
       const dataUrl = body.dataUrl || body.image || "";
       if (!dataUrl) return jsonResponse(400, { error: "dataUrl requis" });
       try {
@@ -207,7 +211,6 @@ export async function handleV1Request(method, url, req, bodyText = "") {
     }
 
     if (route === "verify/official" && method === "POST") {
-      const body = bodyText ? JSON.parse(bodyText) : {};
       const official = await verifyOfficialDocument(body);
       return jsonResponse(200, official);
     }
@@ -220,11 +223,9 @@ export async function handleV1Request(method, url, req, bodyText = "") {
     }
 
     if (route === "visiteurs" && method === "POST") {
-      const body = bodyText ? JSON.parse(bodyText) : {};
       if (!body.nom?.trim() || !body.prenom?.trim()) {
         return jsonResponse(400, { error: "nom et prenom requis" });
       }
-      const state = await getAppState();
       const rec = {
         id: uid(),
         nom: body.nom.trim(),
@@ -238,23 +239,18 @@ export async function handleV1Request(method, url, req, bodyText = "") {
         photo: body.photo || "",
         carteValidite: body.carteValidite || body.dateVisite || today(),
       };
-      state.visiteurs = [...(state.visiteurs || []), rec];
-      state.journal = [
-        ...(state.journal || []),
-        {
-          id: uid(),
-          date: new Date().toISOString(),
-          user: actor.nom || actor.identifiant,
-          action: "Enregistrement visiteur (mobile)",
-          cible: `${rec.prenom} ${rec.nom}`,
-        },
-      ].slice(-1500);
-      await persistState(state);
+      await insertVisiteur(rec);
+      await appendJournal({
+        id: uid(),
+        date: new Date().toISOString(),
+        user: actor.nom || actor.identifiant,
+        action: "Enregistrement visiteur (mobile)",
+        cible: `${rec.prenom} ${rec.nom}`,
+      });
       return jsonResponse(201, { visiteur: publicPerson(rec) });
     }
 
     if (route === "scans" && method === "POST") {
-      const body = bodyText ? JSON.parse(bodyText) : {};
       if (!body.dataUrl && !body.value) {
         return jsonResponse(400, { error: "dataUrl requis (image base64)" });
       }
@@ -277,8 +273,6 @@ export async function handleV1Request(method, url, req, bodyText = "") {
     }
 
     if (route === "bagages" && method === "POST") {
-      const body = bodyText ? JSON.parse(bodyText) : {};
-      const state = await getAppState();
       const rec = {
         id: uid(),
         agentId: actor.sub,
@@ -295,18 +289,14 @@ export async function handleV1Request(method, url, req, bodyText = "") {
       if (!["Conforme", "À inspecter", "Refusé"].includes(rec.statut)) {
         return jsonResponse(400, { error: "statut invalide" });
       }
-      state.bagages = [...(state.bagages || []), rec];
-      state.journal = [
-        ...(state.journal || []),
-        {
-          id: uid(),
-          date: new Date().toISOString(),
-          user: actor.nom || actor.identifiant,
-          action: "Contrôle bagage (mobile)",
-          cible: `${rec.typeObjet} — ${rec.statut}`,
-        },
-      ].slice(-1500);
-      await persistState(state);
+      await insertBagage(rec);
+      await appendJournal({
+        id: uid(),
+        date: new Date().toISOString(),
+        user: actor.nom || actor.identifiant,
+        action: "Contrôle bagage (mobile)",
+        cible: `${rec.typeObjet} — ${rec.statut}`,
+      });
       return jsonResponse(201, { controle: rec });
     }
 

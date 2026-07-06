@@ -12,7 +12,10 @@ async function getWorker() {
         tessedit_pageseg_mode: "11",
       });
       return worker;
-    })();
+    })().catch((err) => {
+      workerPromise = null;
+      throw err;
+    });
   }
   return workerPromise;
 }

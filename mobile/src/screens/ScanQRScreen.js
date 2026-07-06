@@ -24,15 +24,33 @@ function normalizeScanData(data) {
   return raw;
 }
 
-function extractMatricule(raw) {
+// Miroir de extractVerifyFields (packages/shared/verify.mjs) pour l'affichage
+// du matricule — gère le format URL `?m=` ainsi que l'ancien format
+// pipe-délimité `GESTIPERS|matricule|...` (avec ou sans encodage %7C).
+function extractMatricule(rawInput) {
+  let raw = String(rawInput || "").trim();
+  if (!raw) return "";
   try {
-    const url = raw.startsWith("http")
-      ? new URL(raw)
-      : new URL(raw.replace(/^\/?/, ""), "https://gestipers.local");
-    return url.searchParams.get("m") || "";
+    if (/^https?:\/\//i.test(raw) || raw.startsWith("/?")) {
+      const url = raw.startsWith("/?") ? new URL(raw, "https://gestipers.local") : new URL(raw);
+      const m = url.searchParams.get("m");
+      if (m) return m.toUpperCase();
+    }
   } catch {
-    return "";
+    /* ignore */
   }
+  if (/%7C/i.test(raw)) {
+    try {
+      raw = decodeURIComponent(raw);
+    } catch {
+      /* ignore */
+    }
+  }
+  if (raw.includes("|")) {
+    const parts = raw.split("|");
+    if (parts[0] === "GESTIPERS") return (parts[1] || "").toUpperCase();
+  }
+  return "";
 }
 
 function fmtDate(iso) {
