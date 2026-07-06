@@ -60,6 +60,18 @@ Réponse :
 }
 ```
 
+## Base de données
+
+```bash
+npm run turso:init        # crée le schéma
+npm run seed:personnel    # peuple départements + agents depuis database/seed-personnel.json
+```
+
+`seed:personnel` est idempotent : il n'ajoute que les départements/agents absents de
+Turso (par nom / id) et n'écrase jamais de données existantes. Le référentiel
+personnel (`database/seed-personnel.json`) n'est jamais expédié au navigateur —
+l'app web et l'API ne font que lire/écrire dans Turso.
+
 ## Mobile (Expo)
 
 ```bash
