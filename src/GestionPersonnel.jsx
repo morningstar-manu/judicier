@@ -1549,6 +1549,7 @@ const L10N = {
     "nav.employees": "Personnels", "nav.providers": "Prestataires",
     "nav.visitors": "Visiteurs", "nav.leaves": "Congés", "nav.attendance": "Présences",
     "nav.missions": "Missions", "nav.search": "Recherche", "nav.cards": "Cartes",
+    "nav.absenceAuth": "Autorisation d'Absence",
     "nav.validation": "Validation", "nav.accounts": "Comptes", "nav.stats": "Statistiques", "nav.dossiers": "Dossiers", "nav.dossierPerso": "Dossiers personnels", "nav.decrets": "Décrets", "nav.help": "Aide",
     "help.title": "Guide d'utilisation",
     "login.id": "Identifiant", "login.pwd": "Mot de passe", "login.btn": "Se connecter",
@@ -1586,6 +1587,7 @@ const L10N = {
     "nav.employees": "Staff", "nav.providers": "Contractors",
     "nav.visitors": "Visitors", "nav.leaves": "Leave", "nav.attendance": "Attendance",
     "nav.missions": "Missions", "nav.search": "Search", "nav.cards": "Cards",
+    "nav.absenceAuth": "Absence Authorization",
     "nav.validation": "Validation", "nav.accounts": "Accounts", "nav.stats": "Statistics", "nav.dossiers": "Files", "nav.dossierPerso": "Personnel files", "nav.decrets": "Decrees", "nav.help": "Help",
     "help.title": "User guide",
     "login.id": "Username", "login.pwd": "Password", "login.btn": "Sign in",
@@ -1623,6 +1625,7 @@ const L10N = {
     "nav.employees": "Персонал", "nav.providers": "Подрядчики",
     "nav.visitors": "Посетители", "nav.leaves": "Отпуска", "nav.attendance": "Посещаемость",
     "nav.missions": "Командировки", "nav.search": "Поиск", "nav.cards": "Карты",
+    "nav.absenceAuth": "Разрешение на отсутствие",
     "nav.validation": "Утверждение", "nav.accounts": "Учётные записи", "nav.stats": "Статистика", "nav.dossiers": "Досье", "nav.dossierPerso": "Личные дела", "nav.decrets": "Указы", "nav.help": "Справка",
     "help.title": "Руководство пользователя",
     "login.id": "Логин", "login.pwd": "Пароль", "login.btn": "Войти",
@@ -3377,6 +3380,7 @@ ${bande}
       { id: "leaves", label: t("nav.leaves"), icon: CalendarDays },
       { id: "attendance", label: t("nav.attendance"), icon: ClipboardCheck },
       { id: "missions", label: t("nav.missions"), icon: Plane },
+      { id: "absenceAuth", label: t("nav.absenceAuth"), icon: CalendarDays },
     ] },
     { id: "dossierPerso", label: t("nav.dossiers"), icon: FolderOpen, children: [
       { id: "dossierPerso", label: t("nav.dossierPerso"), icon: FileText },
@@ -4013,7 +4017,7 @@ ${bande}
         )}
 
         {/* ===== CONGÉS ===== */}
-        {view === "leaves" && (
+        {(view === "leaves" || view === "absenceAuth") && (
           <>
             <div style={pageHead}>
               <h1 style={{ margin: 0, fontSize: 22 }}>{t("leaves.title")}</h1>
