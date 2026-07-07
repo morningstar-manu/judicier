@@ -1548,7 +1548,7 @@ const L10N = {
     "nav.dashboard": "Tableau de bord", "nav.audiences": "Audiences", "nav.pieceVerif": "Vérification pièces",
     "nav.employees": "Personnels", "nav.providers": "Prestataires",
     "nav.visitors": "Visiteurs", "nav.leaves": "Congés", "nav.attendance": "Présences",
-    "nav.missions": "Missions", "nav.search": "Recherche", "nav.cards": "Cartes",
+    "nav.missions": "Missions", "nav.bagages": "Contrôles bagage", "nav.search": "Recherche", "nav.cards": "Cartes",
     "nav.absenceAuth": "Autorisation d'Absence",
     "nav.validation": "Validation", "nav.accounts": "Comptes", "nav.stats": "Statistiques", "nav.dossiers": "Dossiers", "nav.dossierPerso": "Dossiers personnels", "nav.decrets": "Décrets", "nav.help": "Aide",
     "help.title": "Guide d'utilisation",
@@ -1583,14 +1583,14 @@ const L10N = {
     "st.pending": "En attente de validation", "st.enCours": "En cours", "st.aVenir": "À venir",
     "st.terminee": "Terminée", "st.refusee": "Refusée", "st.validee": "Validée",
     "search.title": "Recherche avancée", "cards.title": "Cartes et badges",
-    "prov.title": "Prestataires", "vis.title": "Visiteurs",
+    "prov.title": "Prestataires", "vis.title": "Visiteurs", "bag.title": "Contrôles bagage",
     "val.title": "Validation", "acc.title": "Comptes utilisateurs",
   },
   en: {
     "nav.dashboard": "Dashboard", "nav.audiences": "Audiences", "nav.pieceVerif": "ID verification",
     "nav.employees": "Staff", "nav.providers": "Contractors",
     "nav.visitors": "Visitors", "nav.leaves": "Leave", "nav.attendance": "Attendance",
-    "nav.missions": "Missions", "nav.search": "Search", "nav.cards": "Cards",
+    "nav.missions": "Missions", "nav.bagages": "Baggage checks", "nav.search": "Search", "nav.cards": "Cards",
     "nav.absenceAuth": "Absence Authorization",
     "nav.validation": "Validation", "nav.accounts": "Accounts", "nav.stats": "Statistics", "nav.dossiers": "Files", "nav.dossierPerso": "Personnel files", "nav.decrets": "Decrees", "nav.help": "Help",
     "help.title": "User guide",
@@ -1625,14 +1625,14 @@ const L10N = {
     "st.pending": "Awaiting approval", "st.enCours": "Ongoing", "st.aVenir": "Upcoming",
     "st.terminee": "Completed", "st.refusee": "Rejected", "st.validee": "Approved",
     "search.title": "Advanced search", "cards.title": "Cards and badges",
-    "prov.title": "Contractors", "vis.title": "Visitors",
+    "prov.title": "Contractors", "vis.title": "Visitors", "bag.title": "Baggage checks",
     "val.title": "Validation", "acc.title": "User accounts",
   },
   ru: {
     "nav.dashboard": "Панель управления", "nav.audiences": "Аудиенции", "nav.pieceVerif": "Проверка документов",
     "nav.employees": "Персонал", "nav.providers": "Подрядчики",
     "nav.visitors": "Посетители", "nav.leaves": "Отпуска", "nav.attendance": "Посещаемость",
-    "nav.missions": "Командировки", "nav.search": "Поиск", "nav.cards": "Карты",
+    "nav.missions": "Командировки", "nav.bagages": "Проверка багажа", "nav.search": "Поиск", "nav.cards": "Карты",
     "nav.absenceAuth": "Разрешение на отсутствие",
     "nav.validation": "Утверждение", "nav.accounts": "Учётные записи", "nav.stats": "Статистика", "nav.dossiers": "Досье", "nav.dossierPerso": "Личные дела", "nav.decrets": "Указы", "nav.help": "Справка",
     "help.title": "Руководство пользователя",
@@ -1667,7 +1667,7 @@ const L10N = {
     "st.pending": "Ожидает утверждения", "st.enCours": "Идёт", "st.aVenir": "Предстоит",
     "st.terminee": "Завершена", "st.refusee": "Отклонена", "st.validee": "Утверждена",
     "search.title": "Расширенный поиск", "cards.title": "Карты и пропуска",
-    "prov.title": "Подрядчики", "vis.title": "Посетители",
+    "prov.title": "Подрядчики", "vis.title": "Посетители", "bag.title": "Проверка багажа",
     "val.title": "Утверждение", "acc.title": "Учётные записи",
   },
 };
@@ -1929,6 +1929,8 @@ export default function GestionPersonnel() {
   const [audienceModal, setAudienceModal] = useState(null);
   const [audienceFilter, setAudienceFilter] = useState("Toutes");
   const [audienceSearch, setAudienceSearch] = useState("");
+  const [bagageFilter, setBagageFilter] = useState("Aujourd'hui");
+  const [bagageSearch, setBagageSearch] = useState("");
   const [confirmDelAudience, setConfirmDelAudience] = useState(null);
   const [pieceVerif, setPieceVerif] = useState({ typePiece: "CNI", numero: "", nom: "", prenom: "", result: null });
 
@@ -2148,6 +2150,22 @@ export default function GestionPersonnel() {
     if (statut === "Refusé") return <Badge bg={C.redSoft} color={C.red}>Refusé</Badge>;
     return <Badge bg={C.amberSoft} color="#9A6B14">À inspecter</Badge>;
   };
+
+  const filteredBagages = useMemo(() => {
+    const t = today();
+    const q = bagageSearch.trim().toLowerCase();
+    return [...bagages]
+      .filter((b) => {
+        if (bagageFilter === "Aujourd'hui" && b.dateControle !== t) return false;
+        if (bagageFilter === "À inspecter" && b.statut !== "À inspecter" && b.statut !== "Refusé") return false;
+        if (bagageFilter === "Conforme" && b.statut !== "Conforme") return false;
+        if (!q) return true;
+        const vis = b.visiteurId ? visiteurs.find((v) => v.id === b.visiteurId) : null;
+        const hay = [b.typeObjet, b.lieu, b.agentNom, b.notes, b.statut, vis?.nom, vis?.prenom].join(" ").toLowerCase();
+        return hay.includes(q);
+      })
+      .sort((a, b) => (b.creeLe || b.dateControle || "").localeCompare(a.creeLe || a.dateControle || ""));
+  }, [bagages, bagageFilter, bagageSearch, visiteurs]);
 
   const verifCtx = useMemo(() => ({
     employees, prestataires, visiteurs, missions, audiences,
@@ -3406,6 +3424,7 @@ ${bande}
     { id: "employees", label: t("nav.employees"), icon: Users, children: [
       { id: "providers", label: t("nav.providers"), icon: Building2 },
       { id: "visitors", label: t("nav.visitors"), icon: UserPlus },
+      { id: "bagages", label: t("nav.bagages"), icon: Luggage },
       { id: "leaves", label: t("nav.leaves"), icon: CalendarDays },
       { id: "attendance", label: t("nav.attendance"), icon: ClipboardCheck },
       { id: "missions", label: t("nav.missions"), icon: Plane },
@@ -3607,7 +3626,7 @@ ${bande}
                 { label: t("kpi.leavesAtt"), value: pendingLeaves, icon: CalendarDays, color: C.red, soft: C.redSoft, go: "leaves" },
                 { label: t("kpi.audiencesAtt"), value: pendingAudiences, icon: Handshake, color: "#9A6B14", soft: C.amberSoft, go: "audiences" },
                 { label: t("kpi.visiteursToday"), value: visiteursAujourdhui.length, icon: UserPlus, color: "#6B5B95", soft: "#F0ECF5", go: "visitors" },
-                { label: t("kpi.bagagesToday"), value: bagagesAujourdhui.length, icon: Luggage, color: C.amber, soft: C.amberSoft, go: "dashboard" },
+                { label: t("kpi.bagagesToday"), value: bagagesAujourdhui.length, icon: Luggage, color: C.amber, soft: C.amberSoft, go: "bagages" },
               ].map((k) => (
                 <div key={k.label} onClick={() => k.go && setView(k.go)}
                   style={{ background: C.card, borderRadius: 13, padding: 18, border: `1px solid ${C.line}`, display: "flex", gap: 14, alignItems: "center", cursor: k.go ? "pointer" : "default" }}
@@ -3688,7 +3707,13 @@ ${bande}
                 ))}
               </div>
               <div style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, padding: 20 }}>
-                <h2 style={{ margin: "0 0 14px", fontSize: 15 }}>{t("dash.bagagesToday")}</h2>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 10, flexWrap: "wrap" }}>
+                  <h2 style={{ margin: 0, fontSize: 15 }}>{t("dash.bagagesToday")}</h2>
+                  <button onClick={() => setView("bagages")}
+                    style={{ background: "none", border: "none", color: C.teal, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    Voir tout →
+                  </button>
+                </div>
                 {bagagesAujourdhui.length === 0 && (
                   <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6 }}>{t("dash.noBagagesToday")}</div>
                 )}
@@ -4817,6 +4842,69 @@ ${bande}
                 </div>
                 ));
               })()}
+            </div>
+          </>
+        )}
+
+        {/* ===== CONTRÔLES BAGAGE ===== */}
+        {view === "bagages" && (
+          <>
+            <div style={pageHead}>
+              <h1 style={{ margin: 0, fontSize: 22 }}>{t("bag.title")}</h1>
+            </div>
+            <p style={{ fontSize: 13, color: C.muted, marginTop: 0, marginBottom: 16 }}>
+              Registre des contrôles bagages et colis effectués depuis l'application mobile terrain (lieu, statut, agent, visiteur lié).
+            </p>
+
+            <div style={toolbar}>
+              <div className="gp-search-wrap" style={{ flex: 1, minWidth: 220 }}>
+                <Search size={16} style={searchIconStyle} />
+                <input value={bagageSearch} onChange={(e) => setBagageSearch(e.target.value)}
+                  placeholder="Rechercher lieu, objet, agent, visiteur…" style={{ ...inputStyle, paddingLeft: 34 }} />
+              </div>
+              <select value={bagageFilter} onChange={(e) => setBagageFilter(e.target.value)} style={{ ...inputStyle, width: "auto" }}>
+                <option>Aujourd'hui</option>
+                <option>Tous</option>
+                <option>Conforme</option>
+                <option>À inspecter</option>
+              </select>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {bagages.length === 0 && (
+                <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 13, padding: 30, textAlign: "center", color: C.muted }}>
+                  Aucun contrôle bagage enregistré. Les agents peuvent en créer depuis l'application mobile.
+                </div>
+              )}
+              {bagages.length > 0 && filteredBagages.length === 0 && (
+                <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 13, padding: 26, textAlign: "center", color: C.muted }}>
+                  Aucun contrôle ne correspond à ce filtre.
+                </div>
+              )}
+              {filteredBagages.map((b) => {
+                const vis = b.visiteurId ? visiteurs.find((v) => v.id === b.visiteurId) : null;
+                return (
+                  <div key={b.id} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 13, padding: "14px 18px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 10, background: C.amberSoft, color: C.amber, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <Luggage size={18} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{b.typeObjet || "Bagage"}</div>
+                      <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2 }}>
+                        {fmtDate(b.dateControle)} · {b.lieu || "Lieu non précisé"}
+                        {b.agentNom ? ` · Agent : ${b.agentNom}` : ""}
+                      </div>
+                      {vis && (
+                        <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 4 }}>
+                          Visiteur : {vis.prenom} {vis.nom}
+                        </div>
+                      )}
+                      {b.notes && <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{b.notes}</div>}
+                    </div>
+                    {bagageBadge(b.statut)}
+                  </div>
+                );
+              })}
             </div>
           </>
         )}
