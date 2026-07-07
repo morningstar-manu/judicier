@@ -1858,6 +1858,39 @@ const CartePro = ({ emp, secret = "", kind = "PR", w = 340 }) => {
   );
 };
 
+const ScanThumb = ({ fileId, size = 52, onOpen }) => {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    if (!fileId) {
+      setSrc("");
+      return undefined;
+    }
+    let alive = true;
+    window.storage.get(`ghr:doc:${fileId}`)
+      .then((r) => { if (alive && r?.value) setSrc(r.value); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [fileId]);
+  if (!fileId) return null;
+  const box = {
+    width: size, height: size, borderRadius: 10, flexShrink: 0, overflow: "hidden",
+    border: `1px solid ${C.line}`, background: C.bg,
+  };
+  if (!src) {
+    return (
+      <div style={{ ...box, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Camera size={18} color={C.muted} />
+      </div>
+    );
+  }
+  return (
+    <button type="button" onClick={() => onOpen?.(fileId)} title="Voir la photo"
+      style={{ ...box, padding: 0, cursor: "pointer" }}>
+      <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+    </button>
+  );
+};
+
 const Modal = ({ title, onClose, children }) => (
   <div style={{ position: "fixed", inset: 0, background: "rgba(20,30,40,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }}
        onClick={onClose}>
@@ -1932,6 +1965,7 @@ export default function GestionPersonnel() {
   const [bagageFilter, setBagageFilter] = useState("Aujourd'hui");
   const [bagageSearch, setBagageSearch] = useState("");
   const [confirmDelAudience, setConfirmDelAudience] = useState(null);
+  const [docPreview, setDocPreview] = useState(null);
   const [pieceVerif, setPieceVerif] = useState({ typePiece: "CNI", numero: "", nom: "", prenom: "", result: null });
 
   const dataRef = useRef(null);
@@ -3074,7 +3108,13 @@ ${bande}
     try {
       const r = await window.storage.get(`ghr:doc:${fid}`);
       if (!r || !r.value) return;
-      const blob = await (await fetch(r.value)).blob();
+      const val = r.value;
+      const isImage = val.startsWith("data:image") || /\.(jpe?g|png|gif|webp)(\?|$)/i.test(nom || "");
+      if (isImage) {
+        setDocPreview({ src: val, nom: nom || "Photo" });
+        return;
+      }
+      const blob = await (await fetch(val)).blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = nom || "document";
@@ -3721,9 +3761,13 @@ ${bande}
                   const vis = b.visiteurId ? visiteurs.find((v) => v.id === b.visiteurId) : null;
                   return (
                     <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.line}`, flexWrap: "wrap" }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 9, background: C.amberSoft, color: C.amber, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <Luggage size={16} />
-                      </div>
+                      {b.photoId ? (
+                        <ScanThumb fileId={b.photoId} size={40} onOpen={(fid) => ouvrirDocStocke(fid, "bagage.jpg")} />
+                      ) : (
+                        <div style={{ width: 32, height: 32, borderRadius: 9, background: C.amberSoft, color: C.amber, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <Luggage size={16} />
+                        </div>
+                      )}
                       <div style={{ flex: 1, minWidth: 160 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 600 }}>{b.typeObjet || "Bagage"}</div>
                         <div style={{ fontSize: 12, color: C.muted }}>
@@ -4885,9 +4929,13 @@ ${bande}
                 const vis = b.visiteurId ? visiteurs.find((v) => v.id === b.visiteurId) : null;
                 return (
                   <div key={b.id} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 13, padding: "14px 18px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 10, background: C.amberSoft, color: C.amber, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <Luggage size={18} />
-                    </div>
+                    {b.photoId ? (
+                      <ScanThumb fileId={b.photoId} size={56} onOpen={(fid) => ouvrirDocStocke(fid, "bagage.jpg")} />
+                    ) : (
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: C.amberSoft, color: C.amber, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Luggage size={18} />
+                      </div>
+                    )}
                     <div style={{ flex: 1, minWidth: 200 }}>
                       <div style={{ fontWeight: 600, fontSize: 14 }}>{b.typeObjet || "Bagage"}</div>
                       <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2 }}>
@@ -4901,7 +4949,15 @@ ${bande}
                       )}
                       {b.notes && <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{b.notes}</div>}
                     </div>
-                    {bagageBadge(b.statut)}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+                      {bagageBadge(b.statut)}
+                      {b.photoId && (
+                        <button type="button" onClick={() => ouvrirDocStocke(b.photoId, "bagage.jpg")}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.tealSoft, color: C.teal, border: "none", borderRadius: 7, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                          <Camera size={14} /> Voir photo
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -6598,6 +6654,18 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
             <button onClick={deleteAudience} style={{ background: C.red, color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Supprimer</button>
           </div>
         </Modal>
+      )}
+
+      {docPreview && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(20,30,40,0.88)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 70, padding: 16 }}
+          onClick={() => setDocPreview(null)}>
+          <button type="button" onClick={() => setDocPreview(null)} aria-label="Fermer"
+            style={{ position: "absolute", top: 18, right: 18, background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 999, width: 40, height: 40, cursor: "pointer", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <X size={22} />
+          </button>
+          <img src={docPreview.src} alt={docPreview.nom} onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "100%", maxHeight: "92vh", borderRadius: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.35)" }} />
+        </div>
       )}
 
       {/* ---------- Confirmation de suppression prestataire / visiteur ---------- */}
