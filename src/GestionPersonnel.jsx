@@ -1965,6 +1965,7 @@ export default function GestionPersonnel() {
   const [bagageFilter, setBagageFilter] = useState("Aujourd'hui");
   const [bagageSearch, setBagageSearch] = useState("");
   const [confirmDelAudience, setConfirmDelAudience] = useState(null);
+  const [confirmDelBagage, setConfirmDelBagage] = useState(null);
   const [docPreview, setDocPreview] = useState(null);
   const [pieceVerif, setPieceVerif] = useState({ typePiece: "CNI", numero: "", nom: "", prenom: "", result: null });
 
@@ -1976,7 +1977,7 @@ export default function GestionPersonnel() {
   const isFormOpen = !!(empModal || leaveModal || deptModal || userModal || exportModal
     || prestModal || visModal || carteModal || missionModal || docModal || decretModal
     || evtModal || audienceModal
-    || confirmDel || confirmDelUser || confirmDelTiers || confirmDelMission || confirmDelAudience
+    || confirmDel || confirmDelUser || confirmDelTiers || confirmDelMission || confirmDelAudience || confirmDelBagage
     || confirmDelDoc || confirmDelDecret || confirmPurgeJournal || dossierAgent || ficheAgent);
 
   const applySessionFromUsers = useCallback((userList) => {
@@ -2687,6 +2688,17 @@ ${leaves.length ? `<table class="donnees"><tr><th>Employé</th><th>Type</th><th>
     save(withLog({ ...data, audiences: audiences.filter((a) => a.id !== it.id) },
       "Suppression d'une demande d'audience", `${it.prenom} ${it.nom}`));
     setConfirmDelAudience(null);
+  };
+
+  const deleteBagage = async () => {
+    if (!confirmDelBagage) return;
+    const it = confirmDelBagage;
+    if (it.photoId) { try { await window.storage.delete(`ghr:doc:${it.photoId}`); } catch (err) {} }
+    const vis = it.visiteurId ? visiteurs.find((v) => v.id === it.visiteurId) : null;
+    const cible = `${it.typeObjet || "Bagage"} — ${it.lieu || "lieu non précisé"}${vis ? ` (${vis.prenom} ${vis.nom})` : ""}`;
+    save(withLog({ ...data, bagages: bagages.filter((b) => b.id !== it.id) },
+      "Suppression d'un contrôle bagage", cible));
+    setConfirmDelBagage(null);
   };
 
   const runPieceVerif = () => {
@@ -4957,6 +4969,12 @@ ${bande}
                           <Camera size={14} /> Voir photo
                         </button>
                       )}
+                      {isAdmin && (
+                        <button type="button" onClick={() => setConfirmDelBagage(b)} title="Supprimer"
+                          style={{ background: "none", border: "none", cursor: "pointer", color: C.red, padding: 4 }}>
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -6652,6 +6670,22 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
             <button onClick={() => setConfirmDelAudience(null)} style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 9, padding: "9px 16px", fontSize: 14, cursor: "pointer", color: C.inkSoft }}>Annuler</button>
             <button onClick={deleteAudience} style={{ background: C.red, color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Supprimer</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ---------- Confirmation suppression contrôle bagage ---------- */}
+      {confirmDelBagage && (
+        <Modal title="Supprimer ce contrôle bagage ?" onClose={() => setConfirmDelBagage(null)}>
+          <p style={{ fontSize: 14, color: C.inkSoft, marginTop: 0 }}>
+            Le contrôle <strong>{confirmDelBagage.typeObjet || "Bagage"}</strong>
+            {confirmDelBagage.lieu ? <> à <strong>{confirmDelBagage.lieu}</strong></> : null}
+            {confirmDelBagage.dateControle ? <> du <strong>{fmtDate(confirmDelBagage.dateControle)}</strong></> : null}
+            {" "}sera définitivement supprimé{confirmDelBagage.photoId ? ", y compris la photo jointe" : ""}.
+          </p>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
+            <button onClick={() => setConfirmDelBagage(null)} style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 9, padding: "9px 16px", fontSize: 14, cursor: "pointer", color: C.inkSoft }}>Annuler</button>
+            <button onClick={deleteBagage} style={{ background: C.red, color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Supprimer</button>
           </div>
         </Modal>
       )}
