@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import {
   Users, LayoutDashboard, CalendarDays, ClipboardCheck, Plus, Search,
   Pencil, Trash2, X, Check, XCircle, Wallet, UserCheck, UserMinus, Briefcase, Camera, Shield, LogOut, Lock,
-  Download, FileText, FileSpreadsheet, CreditCard, Printer, UserPlus, Building2, Plane, MapPin, BadgeCheck, ChevronDown, ChevronRight, History, BarChart3, FolderOpen, ScrollText, Upload, Bell, Handshake, IdCard, CircleHelp
+  Download, FileText, FileSpreadsheet, CreditCard, Printer, UserPlus, Building2, Plane, MapPin, BadgeCheck, ChevronDown, ChevronRight, History, BarChart3, FolderOpen, ScrollText, Upload, Bell, Handshake, IdCard, CircleHelp, Luggage
 } from "lucide-react";
 import GuideUtilisateur from "./GuideUtilisateur.jsx";
 import {
@@ -1568,6 +1568,10 @@ const L10N = {
     "kpi.actifs": "Agents actifs", "kpi.mission": "En mission aujourd'hui",
     "kpi.missionsOk": "Missions validées", "kpi.missionsAtt": "Missions en attente de validation",
     "kpi.conge": "En congé aujourd'hui", "kpi.leavesAtt": "Demandes de congé en attente",
+    "kpi.visiteursToday": "Visiteurs aujourd'hui", "kpi.bagagesToday": "Contrôles bagage aujourd'hui",
+    "dash.visiteursToday": "Visites enregistrées aujourd'hui", "dash.bagagesToday": "Contrôles bagage du jour",
+    "dash.noVisiteursToday": "Aucun visiteur enregistré aujourd'hui. Les agents terrain peuvent enregistrer depuis l'application mobile.",
+    "dash.noBagagesToday": "Aucun contrôle bagage aujourd'hui. Les contrôles effectués sur mobile apparaîtront ici.",
     "emp.title": "Personnels", "emp.add": "Ajouter un agent",
     "th.agent": "Agent", "th.poste": "Poste", "th.dept": "Département", "th.embauche": "Embauche", "th.statut": "Statut",
     "st.actif": "Actif", "st.inactif": "Inactif",
@@ -1606,6 +1610,10 @@ const L10N = {
     "kpi.actifs": "Active staff", "kpi.mission": "On mission today",
     "kpi.missionsOk": "Approved missions", "kpi.missionsAtt": "Missions awaiting approval",
     "kpi.conge": "On leave today", "kpi.leavesAtt": "Pending leave requests",
+    "kpi.visiteursToday": "Visitors today", "kpi.bagagesToday": "Baggage checks today",
+    "dash.visiteursToday": "Visitors registered today", "dash.bagagesToday": "Today's baggage checks",
+    "dash.noVisiteursToday": "No visitors registered today. Field agents can register them from the mobile app.",
+    "dash.noBagagesToday": "No baggage checks today. Mobile inspections will appear here.",
     "emp.title": "Staff", "emp.add": "Add a staff member",
     "th.agent": "Staff member", "th.poste": "Position", "th.dept": "Department", "th.embauche": "Hired", "th.statut": "Status",
     "st.actif": "Active", "st.inactif": "Inactive",
@@ -1644,6 +1652,10 @@ const L10N = {
     "kpi.actifs": "Активный персонал", "kpi.mission": "В командировке сегодня",
     "kpi.missionsOk": "Утверждённые командировки", "kpi.missionsAtt": "Командировки на утверждении",
     "kpi.conge": "В отпуске сегодня", "kpi.leavesAtt": "Заявки на отпуск в ожидании",
+    "kpi.visiteursToday": "Посетители сегодня", "kpi.bagagesToday": "Проверки багажа сегодня",
+    "dash.visiteursToday": "Посетители, зарегистрированные сегодня", "dash.bagagesToday": "Проверки багажа за сегодня",
+    "dash.noVisiteursToday": "Сегодня посетители не зарегистрированы. Регистрация выполняется в мобильном приложении.",
+    "dash.noBagagesToday": "Сегодня проверок багажа нет. Данные с мобильного приложения появятся здесь.",
     "emp.title": "Персонал", "emp.add": "Добавить сотрудника",
     "th.agent": "Сотрудник", "th.poste": "Должность", "th.dept": "Подразделение", "th.embauche": "Принят", "th.statut": "Статус",
     "st.actif": "Активен", "st.inactif": "Неактивен",
@@ -2059,6 +2071,7 @@ export default function GestionPersonnel() {
   const users = data?.users || [];
   const prestataires = data?.prestataires || [];
   const visiteurs = data?.visiteurs || [];
+  const bagages = data?.bagages || [];
   const evenements = data?.evenements || [];
   const missions = data?.missions || [];
   const audiences = data?.audiences || [];
@@ -2119,6 +2132,22 @@ export default function GestionPersonnel() {
   };
   const pendingMissions = missions.filter((m) => m.validation === "En attente").length;
   const pendingAudiences = audiences.filter((a) => a.statut === "En attente").length;
+
+  const visiteursAujourdhui = useMemo(() => {
+    const t = today();
+    return visiteurs.filter((v) => v.dateVisite === t);
+  }, [visiteurs]);
+
+  const bagagesAujourdhui = useMemo(() => {
+    const t = today();
+    return bagages.filter((b) => b.dateControle === t);
+  }, [bagages]);
+
+  const bagageBadge = (statut) => {
+    if (statut === "Conforme") return <Badge bg={C.greenSoft} color={C.green}>Conforme</Badge>;
+    if (statut === "Refusé") return <Badge bg={C.redSoft} color={C.red}>Refusé</Badge>;
+    return <Badge bg={C.amberSoft} color="#9A6B14">À inspecter</Badge>;
+  };
 
   const verifCtx = useMemo(() => ({
     employees, prestataires, visiteurs, missions, audiences,
@@ -3577,6 +3606,8 @@ ${bande}
                 { label: t("kpi.conge"), value: enCongeAujourdhui.length, icon: UserMinus, color: C.amber, soft: C.amberSoft, go: "leaves" },
                 { label: t("kpi.leavesAtt"), value: pendingLeaves, icon: CalendarDays, color: C.red, soft: C.redSoft, go: "leaves" },
                 { label: t("kpi.audiencesAtt"), value: pendingAudiences, icon: Handshake, color: "#9A6B14", soft: C.amberSoft, go: "audiences" },
+                { label: t("kpi.visiteursToday"), value: visiteursAujourdhui.length, icon: UserPlus, color: "#6B5B95", soft: "#F0ECF5", go: "visitors" },
+                { label: t("kpi.bagagesToday"), value: bagagesAujourdhui.length, icon: Luggage, color: C.amber, soft: C.amberSoft, go: "dashboard" },
               ].map((k) => (
                 <div key={k.label} onClick={() => k.go && setView(k.go)}
                   style={{ background: C.card, borderRadius: 13, padding: 18, border: `1px solid ${C.line}`, display: "flex", gap: 14, alignItems: "center", cursor: k.go ? "pointer" : "default" }}
@@ -3625,6 +3656,59 @@ ${bande}
                       {l.statut === "Approuvé" && <Badge bg={C.greenSoft} color={C.green}>Approuvé</Badge>}
                       {l.statut === "Refusé" && <Badge bg={C.redSoft} color={C.red}>Refusé</Badge>}
                       {l.statut === "En attente" && <Badge bg={C.amberSoft} color="#9A6B14">En attente</Badge>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ ...cardGrid2, marginTop: 14 }}>
+              <div style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, padding: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 10, flexWrap: "wrap" }}>
+                  <h2 style={{ margin: 0, fontSize: 15 }}>{t("dash.visiteursToday")}</h2>
+                  <button onClick={() => setView("visitors")}
+                    style={{ background: "none", border: "none", color: C.teal, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    Voir tout →
+                  </button>
+                </div>
+                {visiteursAujourdhui.length === 0 && (
+                  <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6 }}>{t("dash.noVisiteursToday")}</div>
+                )}
+                {[...visiteursAujourdhui].reverse().slice(0, 8).map((v) => (
+                  <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.line}` }}>
+                    <Avatar emp={v} size={32} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600 }}>{v.prenom} {v.nom}</div>
+                      <div style={{ fontSize: 12, color: C.muted }}>
+                        {v.motif || "Visite"}{v.service ? ` · ${v.service}` : ""}{v.evenement ? ` · ${v.evenement}` : ""}
+                      </div>
+                    </div>
+                    <Badge bg={C.tealSoft} color={C.teal}>{v.categorie || "Standard"}</Badge>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background: C.card, borderRadius: 13, border: `1px solid ${C.line}`, padding: 20 }}>
+                <h2 style={{ margin: "0 0 14px", fontSize: 15 }}>{t("dash.bagagesToday")}</h2>
+                {bagagesAujourdhui.length === 0 && (
+                  <div style={{ color: C.muted, fontSize: 13, lineHeight: 1.6 }}>{t("dash.noBagagesToday")}</div>
+                )}
+                {[...bagagesAujourdhui].reverse().slice(0, 8).map((b) => {
+                  const vis = b.visiteurId ? visiteurs.find((v) => v.id === b.visiteurId) : null;
+                  return (
+                    <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.line}`, flexWrap: "wrap" }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 9, background: C.amberSoft, color: C.amber, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Luggage size={16} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 160 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 600 }}>{b.typeObjet || "Bagage"}</div>
+                        <div style={{ fontSize: 12, color: C.muted }}>
+                          {b.lieu || "Lieu non précisé"}
+                          {vis ? ` · ${vis.prenom} ${vis.nom}` : ""}
+                          {b.agentNom ? ` · ${b.agentNom}` : ""}
+                        </div>
+                        {b.notes && <div style={{ fontSize: 11.5, color: C.inkSoft, marginTop: 2 }}>{b.notes}</div>}
+                      </div>
+                      {bagageBadge(b.statut)}
                     </div>
                   );
                 })}
