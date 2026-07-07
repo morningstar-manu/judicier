@@ -1,0 +1,10 @@
+import { handleV1NodeRequest } from "../../_lib/v1-router.mjs";
+
+export default async function handler(req, res) {
+  req.url = "/api/v1/auth/login";
+  await handleV1NodeRequest(req, res);
+}
+
+export const config = {
+  api: { bodyParser: false },
+};

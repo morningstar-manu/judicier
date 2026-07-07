@@ -14,7 +14,8 @@
       },
       "package": "org.gestipers.terrain",
       "permissions": [
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "plugins": [
@@ -36,7 +37,11 @@
     ],
     "scheme": "gestipers",
     "extra": {
-      "apiUrl": "https://www.gestipers.org/api/v1"
-    }
+      "apiUrl": "https://www.gestipers.org/api/v1",
+      "eas": {
+        "projectId": "6b0645b8-ed4c-4f2d-8c34-99134f8b3d18"
+      }
+    },
+    "owner": "morningstar47"
   }
 }

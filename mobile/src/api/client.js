@@ -1,9 +1,23 @@
 import Constants from "expo-constants";
 
-const DEFAULT_URL =
-  Constants.expoConfig?.extra?.apiUrl ||
-  process.env.EXPO_PUBLIC_API_URL ||
-  "http://10.0.2.2:5173/api/v1";
+function resolveApiUrl() {
+  const extraFromExpoConfig = Constants.expoConfig?.extra?.apiUrl;
+  const extraFromManifest = Constants.manifest?.extra?.apiUrl;
+  const extraFromManifest2 =
+    Constants.manifest2?.extra?.expoClient?.extra?.apiUrl ||
+    Constants.manifest2?.extra?.apiUrl;
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
+
+  return (
+    extraFromExpoConfig ||
+    extraFromManifest ||
+    extraFromManifest2 ||
+    fromEnv ||
+    "https://www.gestipers.org/api/v1"
+  );
+}
+
+const DEFAULT_URL = resolveApiUrl();
 
 let token = null;
 
@@ -18,11 +32,16 @@ export function getToken() {
 async function request(path, { method = "GET", body, auth = true } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (auth && token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${DEFAULT_URL}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(`${DEFAULT_URL}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    throw new Error(`Connexion API impossible (${DEFAULT_URL})`);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(data.error || `HTTP ${res.status}`);
