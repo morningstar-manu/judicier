@@ -67,6 +67,36 @@ const PALETTE = ["#5B6BB0", "#0E7C7B", "#B05B8A", "#4A7DB0", "#E8A33D", "#7D9A4E
 const DEPT_COLORS = {};
 DEFAULT_DEPARTEMENTS.forEach((d) => { DEPT_COLORS[d.nom] = d.couleur; });
 const TYPES_CONGE = ["Congé annuel", "Congé maladie", "Congé maternité", "Congé sans solde", "Permission"];
+const TYPE_ABSENCE_AUTH = "Autorisation d'Absence";
+const MOTIFS_ABSENCE = {
+  "Événements familiaux": [
+    "Mariage",
+    "Naissance ou adoption d'un enfant",
+    "Décès d'un proche (conjoint, enfant, parent, frère/sœur, etc.)",
+    "Annonce d'un handicap ou d'une maladie grave chez un enfant",
+  ],
+  "Raisons médicales": [
+    "Rendez-vous médical",
+    "Examens médicaux obligatoires (grossesse, médecine du travail)",
+  ],
+  "Obligations légales ou civiques": [
+    "Convocation par la justice (témoin, juré, partie à un procès)",
+    "Exercice d'un mandat électif ou syndical",
+    "Obligations militaires ou de réserve",
+    "Participation à un jury d'examen",
+  ],
+  "Motifs administratifs": [
+    "Démarches liées à l'état civil (carte d'identité, passeport, etc.)",
+    "Convocation administrative officielle",
+    "Recherche d'un nouveau logement (en cas de licenciement, souvent liée au préavis)",
+  ],
+  "Motifs professionnels": [
+    "Formation professionnelle",
+    "Recherche d'un nouvel emploi pendant un préavis",
+    "Réunions de représentation du personnel (délégués syndicaux, comité d'entreprise)",
+  ],
+};
+const MOTIFS_ABSENCE_FLAT = Object.values(MOTIFS_ABSENCE).flat();
 
 const fmtFCFA = (n) => new Intl.NumberFormat("fr-FR").format(n || 0) + " FCFA";
 const fmtDate = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
@@ -98,6 +128,14 @@ const compressPhoto = (file) =>
 
 const EMPTY_EMP = { nom: "", prenom: "", poste: "", grade: "", matriculeOfficiel: "", hierarchie: "", departement: DEFAULT_DEPARTEMENTS[0].nom, salaire: "", telephone: "", email: "", dateEmbauche: today(), statut: "Actif", photo: "", carteValidite: "" };
 const EMPTY_LEAVE = { employeeId: "", type: TYPES_CONGE[0], debut: today(), fin: today(), motif: "", statut: "En attente" };
+const EMPTY_ABSENCE_AUTH = {
+  employeeId: "",
+  type: TYPE_ABSENCE_AUTH,
+  debut: today(),
+  fin: today(),
+  motif: MOTIFS_ABSENCE_FLAT[0] || "",
+  statut: "En attente",
+};
 const DEFAULT_ADMIN = { id: "u1", nom: "Administrateur", identifiant: "admin", motDePasse: "admin123", role: "Administrateur" };
 const SESSION_KEY = "ghr:session";
 const readSession = () => {
@@ -2101,6 +2139,8 @@ export default function GestionPersonnel() {
 
   const employees = data?.employees || [];
   const leaves = data?.leaves || [];
+  const leavesForView =
+    view === "absenceAuth" ? leaves.filter((l) => l.type === TYPE_ABSENCE_AUTH) : leaves;
   const attendance = data?.attendance || {};
   const departments = data?.departments || DEFAULT_DEPARTEMENTS;
   const deptNames = departments.map((d) => d.nom);
@@ -2359,8 +2399,16 @@ export default function GestionPersonnel() {
   const saveLeave = () => {
     const f = leaveModal.form;
     if (!f.employeeId || !f.debut || !f.fin || f.fin < f.debut) return;
+    const isAbsence = f.type === TYPE_ABSENCE_AUTH || view === "absenceAuth";
     const eL = empById(f.employeeId);
-    save(withLog({ ...data, leaves: [...leaves, { ...f, id: uid() }] }, "Demande de congé", `${eL ? `${eL.prenom} ${eL.nom}` : ""} · ${f.type}`));
+    const next = { ...f, id: uid(), type: isAbsence ? TYPE_ABSENCE_AUTH : f.type };
+    save(
+      withLog(
+        { ...data, leaves: [...leaves, next] },
+        isAbsence ? "Demande d'autorisation d'absence" : "Demande de congé",
+        `${eL ? `${eL.prenom} ${eL.nom}` : ""} · ${isAbsence ? (f.motif || TYPE_ABSENCE_AUTH) : f.type}`,
+      )
+    );
     setLeaveModal(null);
   };
   const setLeaveStatus = async (id, statut) => {
@@ -4185,8 +4233,8 @@ ${bande}
         {(view === "leaves" || view === "absenceAuth") && (
           <>
             <div style={pageHead}>
-              <h1 style={{ margin: 0, fontSize: 22 }}>{t("leaves.title")}</h1>
-              <button onClick={() => setLeaveModal({ form: { ...EMPTY_LEAVE, employeeId: actifs[0]?.id || "" } })}
+              <h1 style={{ margin: 0, fontSize: 22 }}>{view === "absenceAuth" ? t("nav.absenceAuth") : t("leaves.title")}</h1>
+              <button onClick={() => setLeaveModal({ form: { ...(view === "absenceAuth" ? EMPTY_ABSENCE_AUTH : EMPTY_LEAVE), employeeId: actifs[0]?.id || "" } })}
                 disabled={actifs.length === 0}
                 style={{ background: actifs.length ? C.teal : C.muted, color: "#fff", border: "none", borderRadius: 9, padding: "10px 16px", fontSize: 14, fontWeight: 600, cursor: actifs.length ? "pointer" : "not-allowed", display: "flex", gap: 7, alignItems: "center" }}>
                 <Plus size={16} /> Nouvelle demande
@@ -4194,12 +4242,14 @@ ${bande}
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {leaves.length === 0 && (
+              {leavesForView.length === 0 && (
                 <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 13, padding: 30, textAlign: "center", color: C.muted }}>
-                  Aucune demande de congé enregistrée. Cliquez sur « Nouvelle demande » pour commencer.
+                  {view === "absenceAuth"
+                    ? "Aucune autorisation d'absence enregistrée. Cliquez sur « Nouvelle demande » pour commencer."
+                    : "Aucune demande de congé enregistrée. Cliquez sur « Nouvelle demande » pour commencer."}
                 </div>
               )}
-              {[...leaves].reverse().map((l) => {
+              {[...leavesForView].reverse().map((l) => {
                 const e = empById(l.employeeId);
                 const nbJours = Math.round((new Date(l.fin) - new Date(l.debut)) / 86400000) + 1;
                 return (
@@ -5808,18 +5858,37 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
 
       {/* ---------- Modale congé ---------- */}
       {leaveModal && (
-        <Modal title="Nouvelle demande de congé" onClose={() => setLeaveModal(null)}>
+        <Modal
+          title={view === "absenceAuth" ? "Nouvelle demande d'autorisation d'absence" : "Nouvelle demande de congé"}
+          onClose={() => setLeaveModal(null)}
+        >
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <Field label="Employé">
               <select style={inputStyle} value={leaveModal.form.employeeId} onChange={(e) => setLeaveModal({ form: { ...leaveModal.form, employeeId: e.target.value } })}>
                 {actifs.map((e) => <option key={e.id} value={e.id}>{e.prenom} {e.nom}</option>)}
               </select>
             </Field>
-            <Field label="Type de congé">
-              <select style={inputStyle} value={leaveModal.form.type} onChange={(e) => setLeaveModal({ form: { ...leaveModal.form, type: e.target.value } })}>
-                {TYPES_CONGE.map((t) => <option key={t}>{t}</option>)}
-              </select>
-            </Field>
+            {view !== "absenceAuth" ? (
+              <Field label="Type de congé">
+                <select style={inputStyle} value={leaveModal.form.type} onChange={(e) => setLeaveModal({ form: { ...leaveModal.form, type: e.target.value } })}>
+                  {TYPES_CONGE.map((t) => <option key={t}>{t}</option>)}
+                </select>
+              </Field>
+            ) : (
+              <Field label="Motif d'absence">
+                <select
+                  style={inputStyle}
+                  value={leaveModal.form.motif}
+                  onChange={(e) => setLeaveModal({ form: { ...leaveModal.form, motif: e.target.value, type: TYPE_ABSENCE_AUTH } })}
+                >
+                  {Object.entries(MOTIFS_ABSENCE).map(([grp, items]) => (
+                    <optgroup key={grp} label={grp}>
+                      {items.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              </Field>
+            )}
             <div style={formGrid}>
               <Field label="Début"><input type="date" style={inputStyle} value={leaveModal.form.debut} onChange={(e) => setLeaveModal({ form: { ...leaveModal.form, debut: e.target.value } })} /></Field>
               <Field label="Fin"><input type="date" style={inputStyle} value={leaveModal.form.fin} onChange={(e) => setLeaveModal({ form: { ...leaveModal.form, fin: e.target.value } })} /></Field>
@@ -5827,14 +5896,33 @@ ${topMission.length ? tableau("Agents les plus souvent en mission (Top 10)", top
             {leaveModal.form.fin < leaveModal.form.debut && (
               <div style={{ fontSize: 12.5, color: C.red }}>La date de fin doit être postérieure ou égale à la date de début.</div>
             )}
-            <Field label="Motif (facultatif)"><input style={inputStyle} value={leaveModal.form.motif} onChange={(e) => setLeaveModal({ form: { ...leaveModal.form, motif: e.target.value } })} /></Field>
+            {view !== "absenceAuth" && (
+              <Field label="Motif (facultatif)">
+                <input style={inputStyle} value={leaveModal.form.motif} onChange={(e) => setLeaveModal({ form: { ...leaveModal.form, motif: e.target.value } })} />
+              </Field>
+            )}
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
             <button onClick={() => setLeaveModal(null)} style={{ background: "#fff", border: `1px solid ${C.line}`, borderRadius: 9, padding: "9px 16px", fontSize: 14, cursor: "pointer", color: C.inkSoft }}>Annuler</button>
             <button onClick={saveLeave}
-              disabled={!leaveModal.form.employeeId || leaveModal.form.fin < leaveModal.form.debut}
-              style={{ background: C.teal, color: "#fff", border: "none", borderRadius: 9, padding: "9px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", opacity: (!leaveModal.form.employeeId || leaveModal.form.fin < leaveModal.form.debut) ? 0.5 : 1 }}>
-              Enregistrer la demande
+              disabled={
+                !leaveModal.form.employeeId
+                || leaveModal.form.fin < leaveModal.form.debut
+                || (view === "absenceAuth" && !leaveModal.form.motif)
+              }
+              style={{
+                background: C.teal,
+                color: "#fff",
+                border: "none",
+                borderRadius: 9,
+                padding: "9px 18px",
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+                opacity: (!leaveModal.form.employeeId || leaveModal.form.fin < leaveModal.form.debut || (view === "absenceAuth" && !leaveModal.form.motif)) ? 0.5 : 1,
+              }}
+            >
+              {view === "absenceAuth" ? "Enregistrer l'autorisation" : "Enregistrer la demande"}
             </button>
           </div>
         </Modal>
