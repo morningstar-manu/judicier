@@ -3,7 +3,11 @@ import { createHmac, timingSafeEqual } from "crypto";
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
 
 function getSecret() {
-  return process.env.GESTIPERS_API_SECRET || process.env.TURSO_AUTH_TOKEN || "dev-secret-change-me";
+  const secret = process.env.GESTIPERS_API_SECRET;
+  if (!secret) {
+    throw new Error("GESTIPERS_API_SECRET n'est pas configuré");
+  }
+  return secret;
 }
 
 function b64url(data) {

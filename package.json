@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "turso:init": "node scripts/turso-init.mjs",
+    "seed:personnel": "node scripts/seed-personnel.mjs",
     "mobile": "npm run start --prefix mobile",
     "mobile:dev": "npm run start:dev-client --prefix mobile",
     "mobile:android": "npm run android --prefix mobile",

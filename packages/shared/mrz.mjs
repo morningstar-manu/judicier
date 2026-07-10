@@ -46,7 +46,7 @@ export function parseMrzFromText(text) {
       nom,
       prenom,
       dateNaissance: birthToIso(birth),
-      dateExpiration: birthToIso(expiry),
+      dateExpiration: expiryToIso(expiry),
       nationalite: nationality,
       sexe: sex,
       raw: lines,
@@ -64,4 +64,15 @@ function birthToIso(yymmdd) {
   const dd = yymmdd.slice(4, 6);
   const century = yy > 30 ? 1900 : 2000;
   return `${century + yy}-${mm}-${dd}`;
+}
+
+// Les dates d'expiration MRZ sont toujours dans le futur proche (documents
+// valides quelques années) — contrairement aux dates de naissance, l'heuristique
+// de siècle par pivot ne s'applique pas : on utilise toujours 20xx.
+function expiryToIso(yymmdd) {
+  if (!yymmdd || yymmdd.length !== 6) return "";
+  const yy = parseInt(yymmdd.slice(0, 2), 10);
+  const mm = yymmdd.slice(2, 4);
+  const dd = yymmdd.slice(4, 6);
+  return `${2000 + yy}-${mm}-${dd}`;
 }

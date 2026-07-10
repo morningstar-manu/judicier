@@ -291,6 +291,98 @@ export async function loadState() {
   };
 }
 
+export async function findUserByIdentifiant(identifiant) {
+  await ensureSchema();
+  const db = getTurso();
+  const res = await db.execute({
+    sql: "SELECT client_id, nom, identifiant, mot_de_passe, role FROM utilisateurs WHERE LOWER(identifiant) = LOWER(?) LIMIT 1",
+    args: [identifiant],
+  });
+  const r = res.rows[0];
+  if (!r) return null;
+  return {
+    id: r.client_id,
+    nom: r.nom,
+    identifiant: r.identifiant,
+    motDePasse: r.mot_de_passe,
+    role: ROLE_FROM_DB[r.role] || "Utilisateur",
+  };
+}
+
+export async function updateUserPassword(userId, hash) {
+  await ensureSchema();
+  const db = getTurso();
+  await db.execute({
+    sql: "UPDATE utilisateurs SET mot_de_passe = ? WHERE client_id = ?",
+    args: [hash, userId],
+  });
+}
+
+export async function insertVisiteur(rec) {
+  await ensureSchema();
+  const db = getTurso();
+  let evtId = null;
+  if (rec.evenement) {
+    const evtRes = await db.execute({
+      sql: "SELECT id FROM evenements WHERE nom = ? LIMIT 1",
+      args: [rec.evenement],
+    });
+    evtId = evtRes.rows[0]?.id ?? null;
+  }
+  await db.execute({
+    sql: `INSERT INTO visiteurs (client_id, nom, prenom, piece_id, motif, service,
+          evenement_id, evenement_nom, categorie, date_visite, photo, carte_validite)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      rec.id,
+      rec.nom,
+      rec.prenom || "",
+      rec.pieceId || "",
+      rec.motif || "",
+      rec.service || "",
+      evtId,
+      rec.evenement || "",
+      rec.categorie || "Standard",
+      rec.dateVisite,
+      rec.photo || null,
+      rec.carteValidite || null,
+    ],
+  });
+}
+
+export async function insertBagage(rec) {
+  await ensureSchema();
+  const db = getTurso();
+  await db.execute({
+    sql: `INSERT INTO controles_bagages (client_id, agent_id, agent_nom, visiteur_id, lieu,
+          date_controle, type_objet, statut, photo_id, notes, cree_le)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      rec.id,
+      rec.agentId || "",
+      rec.agentNom || "",
+      rec.visiteurId || "",
+      rec.lieu || "",
+      rec.dateControle,
+      rec.typeObjet || "Bagage",
+      rec.statut || "Conforme",
+      rec.photoId || "",
+      rec.notes || "",
+      rec.creeLe || new Date().toISOString(),
+    ],
+  });
+}
+
+export async function appendJournal(entry) {
+  await ensureSchema();
+  const db = getTurso();
+  await db.execute({
+    sql: `INSERT INTO journal (client_id, date_action, utilisateur, action, cible)
+          VALUES (?, ?, ?, ?, ?)`,
+    args: [entry.id, entry.date, entry.user, entry.action, entry.cible || ""],
+  });
+}
+
 export async function saveState(data) {
   await ensureSchema();
   const db = getTurso();
