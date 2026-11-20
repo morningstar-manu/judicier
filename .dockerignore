@@ -1,0 +1,16 @@
+node_modules
+dist
+.git
+.gitignore
+*.md
+.env
+.env.*
+!.env.example
+.vercel
+.expo
+mobile
+eng.traineddata
+docs
+scripts
+deploy
+.github
